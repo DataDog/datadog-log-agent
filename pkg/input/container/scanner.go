@@ -93,7 +93,8 @@ func (c *ContainerInput) scan() {
 func (c *ContainerInput) listContainers() []types.Container {
 	containers, err := c.cli.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
-		panic(err)
+		log.Println("Can't tail containers,", err)
+		return []types.Container{}
 	}
 	return containers
 }
