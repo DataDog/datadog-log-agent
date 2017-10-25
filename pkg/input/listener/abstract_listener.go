@@ -44,7 +44,10 @@ func (anl *AbstractNetworkListener) forwardMessages(d *decoder.Decoder) {
 			return
 		}
 
-		netMsg := message.NewNetworkMessage(msg.Content(), anl.source)
+		netMsg := message.NewNetworkMessage(msg.Content())
+		o := message.NewOrigin()
+		o.LogSource = anl.source
+		netMsg.SetOrigin(o)
 		anl.outputChan <- netMsg
 	}
 }
