@@ -19,6 +19,7 @@ const (
 	TCP_TYPE         = "tcp"
 	UDP_TYPE         = "udp"
 	FILE_TYPE        = "file"
+	DOCKER_TYPE      = "docker"
 	EXCLUDE_AT_MATCH = "exclude_at_match"
 	MASK_SEQUENCES   = "mask_sequences"
 )
@@ -131,6 +132,7 @@ func validateSource(config IntegrationConfigLogSource) error {
 
 	switch config.Type {
 	case FILE_TYPE,
+		DOCKER_TYPE,
 		TCP_TYPE,
 		UDP_TYPE:
 	default:
