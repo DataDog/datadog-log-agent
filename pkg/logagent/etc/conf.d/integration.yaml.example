@@ -1,0 +1,19 @@
+init_config:
+
+instances:
+  - whatever: anything
+  
+logs:
+  - type: file
+    path: /home/vagrant/logrotate/tail.log
+    service: custom
+    source: custom
+    tags: env:demo,test
+
+  - type: tcp
+    logset: playground2
+    port: 10514
+
+  - type: udp
+    logset: playground2
+    port: 10515

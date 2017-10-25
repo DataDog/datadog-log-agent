@@ -1,0 +1,6 @@
+log_dd_url: "intake.logs.datadoghq.com"
+logset: main
+
+api_key: <api_key>
+log_enabled: true
+hostname: "myhost"

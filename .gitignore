@@ -1,0 +1,7 @@
+/vendor
+/build
+pkg/auditor/tests/*
+pkg/input/tailer/tests/*
+pkg/logagent/etc/*.yaml
+pkg/logagent/etc/conf.d/*.yaml
+/logagent
