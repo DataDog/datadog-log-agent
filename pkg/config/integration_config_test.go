@@ -44,6 +44,7 @@ func TestBuildLogsAgentIntegrationsConfigs(t *testing.T) {
 	assert.Equal(t, 0, len(rules[1].Tags))
 
 	assert.Equal(t, "docker", rules[2].Type)
+	assert.Equal(t, "test", rules[2].Image)
 
 	// processing
 	assert.Equal(t, 0, len(rules[0].ProcessingRules))
