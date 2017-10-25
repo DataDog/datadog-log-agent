@@ -93,3 +93,14 @@ func NewNetworkMessage(content []byte) *NetworkMessage {
 		message: NewMessage(content),
 	}
 }
+
+// ContainerMessage is a message coming from a container Source
+type ContainerMessage struct {
+	*message
+}
+
+func NewContainerMessage(content []byte) *ContainerMessage {
+	return &ContainerMessage{
+		message: NewMessage(content),
+	}
+}

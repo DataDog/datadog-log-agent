@@ -8,6 +8,7 @@ package main
 import (
 	"github.com/DataDog/datadog-log-agent/pkg/auditor"
 	"github.com/DataDog/datadog-log-agent/pkg/config"
+	"github.com/DataDog/datadog-log-agent/pkg/input/container"
 	"github.com/DataDog/datadog-log-agent/pkg/input/listener"
 	"github.com/DataDog/datadog-log-agent/pkg/input/tailer"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
@@ -66,4 +67,9 @@ func Start() {
 
 	s := tailer.New(config.GetLogsSources(), filePipelinesEntryChannels, a)
 	s.Start()
+
+	// fixme: this is not great, we share the same pipelines as tailers.
+	// they can easily get overloaded, we'd need a better design
+	c := container.New(config.GetLogsSources(), filePipelinesEntryChannels)
+	c.Start()
 }
