@@ -7,6 +7,7 @@ package container
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -50,8 +51,10 @@ func New(sources []*config.IntegrationConfigLogSource, outputChans [](chan messa
 
 // Start starts the ContainerInput
 func (c *ContainerInput) Start() {
-	c.setup()
-	go c.run()
+	err := c.setup()
+	if err == nil {
+		go c.run()
+	}
 }
 
 // run lets the ContainerInput tail docker stdouts
@@ -94,22 +97,24 @@ func (c *ContainerInput) listContainers() []types.Container {
 	containers, err := c.cli.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
 		log.Println("Can't tail containers,", err)
+		log.Println("Is datadog-agent part of docker user group?")
 		return []types.Container{}
 	}
 	return containers
 }
 
 // Start starts the ContainerInput
-func (c *ContainerInput) setup() {
+func (c *ContainerInput) setup() error {
 	if len(c.sources) == 0 {
-		return
+		return fmt.Errorf("No container source defined")
 	}
 
 	// List available containers
 	cli, err := client.NewEnvClient()
 	c.cli = cli
 	if err != nil {
-		panic(err)
+		log.Println("Can't tail containers,", err)
+		return fmt.Errorf("Can't initialize client")
 	}
 	containers := c.listContainers()
 
@@ -128,6 +133,7 @@ func (c *ContainerInput) setup() {
 			}
 		}
 	}
+	return nil
 }
 
 // setupTailer sets one tailer, making it tail from the begining or the end
