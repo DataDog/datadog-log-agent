@@ -63,28 +63,25 @@ func (p *Processor) run() {
 // For instance, we want to add the timestamp, hostname and a log level
 // to messages coming from a file
 func (p *Processor) computeExtraContent(msg message.Message) []byte {
-	switch msg.(type) {
-	case *message.NetworkMessage, *message.FileMessage:
-		if len(msg.Content()) > 0 && msg.Content()[0] != '<' {
-			// fit RFC5424
-			// <%pri%>%protocol-version% %timestamp:::date-rfc3339% %HOSTNAME% %$!new-appname% - - - %msg%\n
-			timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000000+00:00")
-			extraContent := []byte("<46>0 ")
-			extraContent = append(extraContent, []byte(timestamp)...)
-			extraContent = append(extraContent, ' ')
-			extraContent = append(extraContent, []byte(config.LogsAgent.GetString("hostname"))...)
-			extraContent = append(extraContent, ' ')
-			service := msg.GetOrigin().LogSource.Service
-			if service != "" {
-				extraContent = append(extraContent, []byte(service)...)
-			} else {
-				extraContent = append(extraContent, '-')
-			}
-			extraContent = append(extraContent, []byte(" - - ")...)
-			extraContent = append(extraContent, msg.GetOrigin().LogSource.TagsPayload...)
-			extraContent = append(extraContent, ' ')
-			return extraContent
+	if len(msg.Content()) > 0 && msg.Content()[0] != '<' {
+		// fit RFC5424
+		// <%pri%>%protocol-version% %timestamp:::date-rfc3339% %HOSTNAME% %$!new-appname% - - - %msg%\n
+		timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000000+00:00")
+		extraContent := []byte("<46>0 ")
+		extraContent = append(extraContent, []byte(timestamp)...)
+		extraContent = append(extraContent, ' ')
+		extraContent = append(extraContent, []byte(config.LogsAgent.GetString("hostname"))...)
+		extraContent = append(extraContent, ' ')
+		service := msg.GetOrigin().LogSource.Service
+		if service != "" {
+			extraContent = append(extraContent, []byte(service)...)
+		} else {
+			extraContent = append(extraContent, '-')
 		}
+		extraContent = append(extraContent, []byte(" - - ")...)
+		extraContent = append(extraContent, msg.GetOrigin().LogSource.TagsPayload...)
+		extraContent = append(extraContent, ' ')
+		return extraContent
 	}
 	return nil
 }
