@@ -21,7 +21,7 @@ import (
 
 const defaultSleepDuration = 1 * time.Second
 
-//FIXME comments
+// DockerTail tails logs coming from stdout and stderr of a docker container
 type DockerTail struct {
 	containerName string
 	outputChan    chan message.Message
@@ -33,7 +33,7 @@ type DockerTail struct {
 	sleepDuration time.Duration
 }
 
-// NewDockerTailer(client, container, source, outputChan)
+// NewDockerTailer returns a new DockerTailer
 func NewDockerTailer(cli *client.Client, container types.Container, source *config.IntegrationConfigLogSource, outputChan chan message.Message) *DockerTail {
 	return &DockerTail{
 		containerName: container.ID,
@@ -46,30 +46,38 @@ func NewDockerTailer(cli *client.Client, container types.Container, source *conf
 	}
 }
 
+// Stop stops the DockerTailer
 func (dt *DockerTail) Stop(shouldTrackOffset bool) {
 	fmt.Println("Stop")
 }
 
+// tailFromBegining starts the tailing from the beginning
+// of the container logs
 func (dt *DockerTail) tailFromBegining() error {
 	return dt.tailFrom(time.Time{})
 }
 
+// tailFromEnd starts the tailing from the last line
+// of the container logs
 func (dt *DockerTail) tailFromEnd() error {
 	return dt.tailFrom(time.Now())
 }
 
+// tailFrom starts the tailing from the specified time
 func (dt *DockerTail) tailFrom(from time.Time) error {
 	dt.d.Start()
 	go dt.forwardMessages()
 	return dt.startReading(from)
 }
 
+// startReading starts the reader that reads the container's stdout,
+// with proper configuration
 func (dt *DockerTail) startReading(from time.Time) error {
 	options := types.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     true,
-		Timestamps: false,
+		Timestamps: true,
 		Since:      from.Format("2006-01-02T15:04:05"),
 	}
 
@@ -82,6 +90,8 @@ func (dt *DockerTail) startReading(from time.Time) error {
 	return nil
 }
 
+// readForever reads from the reader as fast as it can,
+// and sleeps when there is nothing to read
 func (dt *DockerTail) readForever() {
 	for {
 		inBuf := make([]byte, 4096)
@@ -102,6 +112,12 @@ func (dt *DockerTail) readForever() {
 	}
 }
 
+// forwardMessages forwards decoded messages to the next pipeline,
+// adding a bit of meta information
+// Note: For docker container logs, we ask for the timestamp
+// to store the time of the last processed line.
+// As a result, we need to remove this timestamp from the log
+// message before forwarding it
 func (dt *DockerTail) forwardMessages() {
 	for msg := range dt.d.OutputChan {
 		_, ok := msg.(*message.StopMessage)
@@ -109,13 +125,11 @@ func (dt *DockerTail) forwardMessages() {
 			return
 		}
 
-		// FIXME: drop date?? at least extract
-		fmt.Println("Got docker message", string(msg.Content()), "for container", dt.containerName)
+		ts, updatedMsg := dt.parseMessage(msg.Content())
 
-		containerMsg := message.NewContainerMessage(msg.Content())
+		containerMsg := message.NewContainerMessage(updatedMsg)
 		msgOrigin := message.NewOrigin()
 		msgOrigin.LogSource = dt.source
-		ts := time.Now()
 		msgOrigin.Timestamp = &ts
 		msgOrigin.Identifier = dt.containerName
 		containerMsg.SetOrigin(msgOrigin)
@@ -123,7 +137,19 @@ func (dt *DockerTail) forwardMessages() {
 	}
 }
 
-// wait lets the tailer sleep for a bit
+// parseMessage extracts the date from the raw docker message, which looks like
+// <2006-01-12T01:01:01.000000000Z my message
+func (dt *DockerTail) parseMessage(msg []byte) (time.Time, []byte) {
+	layout := "2006-01-02T15:04:05.000000000Z"
+	ts, err := time.Parse(layout, string(msg[1:31]))
+
+	if err != nil {
+		fmt.Println(err)
+	}
+	return ts, msg[32:]
+}
+
+// wait lets the reader sleep for a bit
 func (dt *DockerTail) wait() {
 	time.Sleep(dt.sleepDuration)
 }
