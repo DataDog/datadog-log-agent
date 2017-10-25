@@ -10,6 +10,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/DataDog/datadog-log-agent/pkg/auditor"
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
 	"github.com/docker/docker/api/types"
@@ -24,11 +25,11 @@ type ContainerInput struct {
 	sources     []*config.IntegrationConfigLogSource
 	tailers     map[string]*DockerTail
 	cli         *client.Client
-	// FIXME: *client.Client and others
+	auditor     *auditor.Auditor
 }
 
 // New returns an initialized ContainerInput
-func New(sources []*config.IntegrationConfigLogSource, outputChans [](chan message.Message)) *ContainerInput {
+func New(sources []*config.IntegrationConfigLogSource, outputChans [](chan message.Message), a *auditor.Auditor) *ContainerInput {
 
 	containerSources := []*config.IntegrationConfigLogSource{}
 	for _, source := range sources {
@@ -43,6 +44,7 @@ func New(sources []*config.IntegrationConfigLogSource, outputChans [](chan messa
 		outputChans: outputChans,
 		sources:     containerSources,
 		tailers:     make(map[string]*DockerTail),
+		auditor:     a,
 	}
 }
 
@@ -68,7 +70,6 @@ func (c *ContainerInput) scan() {
 		for _, container := range containers {
 			if container.Image == source.Image {
 				if _, ok := c.tailers[container.ID]; !ok {
-					// fixme source id
 					c.setupTailer(c.cli, container, source, true, c.outputChans[0])
 				}
 			}
@@ -123,10 +124,7 @@ func (c *ContainerInput) setupTailer(cli *client.Client, container types.Contain
 	if tailFromBegining {
 		err = t.tailFromBegining()
 	} else {
-		err = t.tailFromEnd()
-		// FIXME
-		// // resume tailing from last commited offset
-		// err = t.tailFrom(s.auditor.GetLastCommitedOffset(t.source))
+		err = t.tailFrom(*c.auditor.GetLastCommitedTimestamp(container.ID))
 	}
 	if err != nil {
 		log.Println(err)

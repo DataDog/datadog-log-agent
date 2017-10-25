@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"time"
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
@@ -52,33 +51,26 @@ func (dt *DockerTail) Stop(shouldTrackOffset bool) {
 }
 
 func (dt *DockerTail) tailFromBegining() error {
-	return dt.tailFrom(0, os.SEEK_SET)
+	return dt.tailFrom(time.Time{})
 }
 
 func (dt *DockerTail) tailFromEnd() error {
-	return dt.tailFrom(0, os.SEEK_END)
+	return dt.tailFrom(time.Now())
 }
 
-func (dt *DockerTail) tailFrom(offset int64, whence int) error {
+func (dt *DockerTail) tailFrom(from time.Time) error {
 	dt.d.Start()
 	go dt.forwardMessages()
-	return dt.startReading(offset, whence)
+	return dt.startReading(from)
 }
 
-func (dt *DockerTail) startReading(offset int64, whence int) error {
-	// FIXME: offset
+func (dt *DockerTail) startReading(from time.Time) error {
 	options := types.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     true,
 		Timestamps: false,
-	}
-	if whence == os.SEEK_END {
-		t := time.Now()
-		options.Since = t.Format("2006-01-02T15:04:05")
-	}
-	if whence == os.SEEK_SET {
-		options.Since = ""
+		Since:      from.Format("2006-01-02T15:04:05"),
 	}
 
 	reader, err := dt.cli.ContainerLogs(context.Background(), dt.containerName, options)
@@ -106,7 +98,7 @@ func (dt *DockerTail) readForever() {
 			dt.wait()
 			continue
 		}
-		dt.d.InputChan <- decoder.NewPayload(inBuf[:n], 0) // fixme: use date
+		dt.d.InputChan <- decoder.NewPayload(inBuf[:n], 0)
 	}
 }
 
@@ -123,9 +115,10 @@ func (dt *DockerTail) forwardMessages() {
 		containerMsg := message.NewContainerMessage(msg.Content())
 		msgOrigin := message.NewOrigin()
 		msgOrigin.LogSource = dt.source
+		ts := time.Now()
+		msgOrigin.Timestamp = &ts
 		msgOrigin.Identifier = dt.containerName
 		containerMsg.SetOrigin(msgOrigin)
-		// FIXME message.Date
 		dt.outputChan <- containerMsg
 	}
 }
