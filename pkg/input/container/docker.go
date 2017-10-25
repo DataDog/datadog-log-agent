@@ -8,6 +8,7 @@ package container
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"time"
@@ -135,7 +136,7 @@ func (dt *DockerTail) forwardMessages() {
 			return
 		}
 
-		ts, updatedMsg := dt.parseMessage(msg.Content())
+		ts, updatedMsg := dt.updatedDockerMessage(msg.Content())
 
 		containerMsg := message.NewContainerMessage(updatedMsg)
 		msgOrigin := message.NewOrigin()
@@ -145,6 +146,12 @@ func (dt *DockerTail) forwardMessages() {
 		containerMsg.SetOrigin(msgOrigin)
 		dt.outputChan <- containerMsg
 	}
+}
+
+func (dt *DockerTail) updatedDockerMessage(msg []byte) (time.Time, []byte) {
+	ts, parsedMsg := dt.parseMessage(msg)
+	updatedMsg := fmt.Sprintf("{\"message\": \"%s\", \"timestamp\": %d}", parsedMsg, ts.UnixNano()/int64(time.Millisecond))
+	return ts, []byte(updatedMsg)
 }
 
 // parseMessage extracts the date from the raw docker message, which looks like
