@@ -4,6 +4,14 @@ import:
   subpackages:
   - statsd
 - package: github.com/spf13/viper
+- package: github.com/moby/moby
+  version: ~1.13.1
+  subpackages:
+  - client
+- package: github.com/docker/docker
+  version: ~1.13.1
+  subpackages:
+   - api
 testImport:
 - package: github.com/stretchr/testify
   subpackages:

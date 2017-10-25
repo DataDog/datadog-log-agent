@@ -1,10 +1,14 @@
-hash: a73cfe93d85a23bdd3b79031db6a514e53ad414a63122f2514eb3ab11d31ea45
-updated: 2017-06-26T10:14:56.787357986Z
+hash: 514e80760608926d0be42cfa51e68c734c6bed468d678fc2154f3246860a95ca
+updated: 2017-10-25T13:41:13.201352972Z
 imports:
 - name: github.com/DataDog/datadog-go
   version: a9c7a9896c1847c9cc2b068a2ae68e9d74540a5d
   subpackages:
   - statsd
+- name: github.com/docker/docker
+  version: 092cba3727bb9b4a2f0e922cd6c0f93ea270e363
+  subpackages:
+  - api
 - name: github.com/fsnotify/fsnotify
   version: 629574ca2a5df945712d3079857300b5e4da0236
 - name: github.com/hashicorp/hcl
@@ -22,6 +26,10 @@ imports:
   version: 51463bfca2576e06c62a8504b5c0f06d61312647
 - name: github.com/mitchellh/mapstructure
   version: cc8532a8e9a55ea36402aa21efdf403a60d34096
+- name: github.com/moby/moby
+  version: 092cba3727bb9b4a2f0e922cd6c0f93ea270e363
+  subpackages:
+  - client
 - name: github.com/pelletier/go-buffruneio
   version: c37440a7cf42ac63b919c752ca73a85067e05992
 - name: github.com/pelletier/go-toml
@@ -62,3 +70,5 @@ testImports:
   version: 69483b4bd14f5845b5a1e55bca19e954e827f1d0
   subpackages:
   - assert
+  - require
+  - suite
