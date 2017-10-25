@@ -19,8 +19,9 @@ type Message interface {
 
 // MessageOrigin represents the Origin of a message
 type MessageOrigin struct {
-	LogSource *config.IntegrationConfigLogSource
-	Offset    int64
+	Identifier string
+	LogSource  *config.IntegrationConfigLogSource
+	Offset     int64
 }
 
 type message struct {

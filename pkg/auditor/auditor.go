@@ -94,11 +94,11 @@ func (a *Auditor) cleanupRegistryPeriodically() {
 // run lets the auditor update the registry
 func (a *Auditor) run() {
 	for msg := range a.inputChan {
-		// An offset of 0 means that we don't want to store the offset for that origin.
+		// An empty Identifier means we don't want to track down the offset
 		// This is useful for origins that don't have offsets (networks), or when we
 		// specially want to avoid storing the offset
-		if msg.GetOrigin().Offset > 0 {
-			a.updateRegistry(msg.GetOrigin().LogSource.Path, msg.GetOrigin().Offset)
+		if msg.GetOrigin().Identifier != "" {
+			a.updateRegistry(msg.GetOrigin().Identifier, msg.GetOrigin().Offset)
 		}
 	}
 }
@@ -158,10 +158,10 @@ func (a *Auditor) flushRegistry(registry map[string]*RegistryEntry, path string)
 	return ioutil.WriteFile(path, mr, 0644)
 }
 
-// GetLastCommitedOffset returns the last commited offset for a given source
-func (a *Auditor) GetLastCommitedOffset(source *config.IntegrationConfigLogSource) (int64, int) {
+// GetLastCommitedOffset returns the last commited offset for a given identifier
+func (a *Auditor) GetLastCommitedOffset(identifier string) (int64, int) {
 	r := a.readOnlyRegistryCopy(a.registry)
-	entry, ok := r[source.Path]
+	entry, ok := r[identifier]
 	if !ok {
 		return 0, os.SEEK_END
 	}

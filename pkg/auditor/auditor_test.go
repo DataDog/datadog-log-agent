@@ -83,12 +83,12 @@ func (suite *AuditorTestSuite) TestAuditorRecoversRegistry() {
 		Timestamp: time.Date(2006, time.January, 12, 1, 1, 1, 1, time.Local),
 		Offset:    42,
 	}
-	offset, whence := suite.a.GetLastCommitedOffset(suite.source)
+	offset, whence := suite.a.GetLastCommitedOffset(suite.source.Path)
 	suite.Equal(int64(42), offset)
 	suite.Equal(os.SEEK_CUR, whence)
 
 	othersource := &config.IntegrationConfigLogSource{Path: "anotherpath"}
-	offset, whence = suite.a.GetLastCommitedOffset(othersource)
+	offset, whence = suite.a.GetLastCommitedOffset(othersource.Path)
 	suite.Equal(int64(0), offset)
 	suite.Equal(os.SEEK_END, whence)
 }
