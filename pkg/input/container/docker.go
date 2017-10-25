@@ -152,7 +152,7 @@ func (dt *DockerTail) forwardMessages() {
 func (dt *DockerTail) parseMessage(msg []byte) (time.Time, []byte) {
 	// Note: We have some null bytes at the beginning of msg,
 	// thus looking for the first '<'
-	from := bytes.Index(msg, []byte("<")) + 1
+	from := bytes.IndexAny(msg, "<g") + 1
 	to := bytes.Index(msg, []byte(" "))
 	ts, err := time.Parse(Datelayout, string(msg[from:to]))
 
