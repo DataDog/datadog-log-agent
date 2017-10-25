@@ -66,16 +66,28 @@ func (c *ContainerInput) run() {
 // tail, as well as stopped containers
 func (c *ContainerInput) scan() {
 	containers := c.listContainers()
+	containersIds := make(map[string]bool)
+
+	// monitor new containers
 	for _, source := range c.sources {
 		for _, container := range containers {
 			if container.Image == source.Image {
+				containersIds[container.ID] = true
 				if _, ok := c.tailers[container.ID]; !ok {
 					c.setupTailer(c.cli, container, source, true, c.outputChans[0])
 				}
 			}
 		}
 	}
-	// FIXME: Stop dead containers if needed
+
+	// stop old containers
+	for containerId, tailer := range c.tailers {
+		if _, ok := containersIds[containerId]; !ok {
+			log.Println("Stop tailing container", containerId[:12])
+			tailer.Stop()
+			delete(c.tailers, containerId)
+		}
+	}
 }
 
 func (c *ContainerInput) listContainers() []types.Container {
@@ -119,6 +131,7 @@ func (c *ContainerInput) setup() {
 
 // setupTailer sets one tailer, making it tail from the begining or the end
 func (c *ContainerInput) setupTailer(cli *client.Client, container types.Container, source *config.IntegrationConfigLogSource, tailFromBegining bool, outputChan chan message.Message) {
+	log.Println("Detected container", container.Image, "-", container.ID[:12])
 	t := NewDockerTailer(cli, container, source, outputChan)
 	var err error
 	if tailFromBegining {
@@ -134,8 +147,7 @@ func (c *ContainerInput) setupTailer(cli *client.Client, container types.Contain
 
 // Stop stops the ContainerInput and its tailers
 func (c *ContainerInput) Stop() {
-	shouldTrackOffset := true
 	for _, t := range c.tailers {
-		t.Stop(shouldTrackOffset)
+		t.Stop()
 	}
 }

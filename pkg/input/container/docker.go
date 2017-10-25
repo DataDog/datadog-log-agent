@@ -6,8 +6,8 @@
 package container
 
 import (
+	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"log"
 	"time"
@@ -20,6 +20,7 @@ import (
 )
 
 const defaultSleepDuration = 1 * time.Second
+const Datelayout = "2006-01-02T15:04:05.000000000Z"
 
 // DockerTail tails logs coming from stdout and stderr of a docker container
 type DockerTail struct {
@@ -31,6 +32,7 @@ type DockerTail struct {
 	cli           *client.Client
 
 	sleepDuration time.Duration
+	shouldStop    bool
 }
 
 // NewDockerTailer returns a new DockerTailer
@@ -47,8 +49,9 @@ func NewDockerTailer(cli *client.Client, container types.Container, source *conf
 }
 
 // Stop stops the DockerTailer
-func (dt *DockerTail) Stop(shouldTrackOffset bool) {
-	fmt.Println("Stop")
+func (dt *DockerTail) Stop() {
+	dt.shouldStop = true
+	dt.d.Stop()
 }
 
 // tailFromBegining starts the tailing from the beginning
@@ -94,6 +97,13 @@ func (dt *DockerTail) startReading(from time.Time) error {
 // and sleeps when there is nothing to read
 func (dt *DockerTail) readForever() {
 	for {
+
+		if dt.shouldStop {
+			// this means that we stop reading as soon as we get the stop message,
+			// but on the other hand we get it when the container is stopped so it should be fine
+			return
+		}
+
 		inBuf := make([]byte, 4096)
 		n, err := dt.reader.Read(inBuf)
 		if err == io.EOF {
@@ -140,13 +150,17 @@ func (dt *DockerTail) forwardMessages() {
 // parseMessage extracts the date from the raw docker message, which looks like
 // <2006-01-12T01:01:01.000000000Z my message
 func (dt *DockerTail) parseMessage(msg []byte) (time.Time, []byte) {
-	layout := "2006-01-02T15:04:05.000000000Z"
-	ts, err := time.Parse(layout, string(msg[1:31]))
+	// Note: We have some null bytes at the beginning of msg,
+	// thus looking for the first '<'
+	from := bytes.Index(msg, []byte("<")) + 1
+	to := bytes.Index(msg, []byte(" "))
+	ts, err := time.Parse(Datelayout, string(msg[from:to]))
 
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
+		return ts, msg
 	}
-	return ts, msg[32:]
+	return ts, msg[to+1:]
 }
 
 // wait lets the reader sleep for a bit
