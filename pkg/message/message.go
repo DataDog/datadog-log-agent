@@ -6,6 +6,8 @@
 package message
 
 import (
+	"time"
+
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 )
 
@@ -22,6 +24,7 @@ type MessageOrigin struct {
 	Identifier string
 	LogSource  *config.IntegrationConfigLogSource
 	Offset     int64
+	Timestamp  *time.Time
 }
 
 type message struct {
