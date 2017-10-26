@@ -11,7 +11,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strings"
 	"time"
+
+	"github.com/DataDog/datadog-agent/pkg/tagger"
+	dockerutil "github.com/DataDog/datadog-agent/pkg/util/docker"
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/decoder"
@@ -149,25 +153,43 @@ func (dt *DockerTail) forwardMessages() {
 }
 
 func (dt *DockerTail) updatedDockerMessage(msg []byte) (time.Time, []byte) {
-	ts, parsedMsg := dt.parseMessage(msg)
-	updatedMsg := fmt.Sprintf("{\"message\": \"%s\", \"timestamp\": %d}", parsedMsg, ts.UnixNano()/int64(time.Millisecond))
+	ts, severity, parsedMsg := dt.parseMessage(msg)
+	tags, err := tagger.Tag(dockerutil.ContainerIDToEntityName(dt.containerName), false)
+
+	if err != nil {
+		log.Println(err)
+	}
+
+	updatedMsg := fmt.Sprintf(
+		"{\"message\": \"%s\", \"timestamp\": %d, \"ddtags\": \"%s\", \"severity\": \"%s\"}",
+		parsedMsg,
+		ts.UnixNano()/int64(time.Millisecond),
+		strings.Join(tags, ","),
+		severity,
+	)
 	return ts, []byte(updatedMsg)
 }
 
 // parseMessage extracts the date from the raw docker message, which looks like
 // <2006-01-12T01:01:01.000000000Z my message
-func (dt *DockerTail) parseMessage(msg []byte) (time.Time, []byte) {
+func (dt *DockerTail) parseMessage(msg []byte) (time.Time, string, []byte) {
 	// Note: We have some null bytes at the beginning of msg,
 	// thus looking for the first '<'
-	from := bytes.IndexAny(msg, "<g") + 1
+	from := bytes.IndexAny(msg, "<g")
 	to := bytes.Index(msg, []byte(" "))
-	ts, err := time.Parse(Datelayout, string(msg[from:to]))
+	ts, err := time.Parse(Datelayout, string(msg[from+1:to]))
 
 	if err != nil {
 		log.Println(err)
-		return ts, msg
+		return ts, "", msg
 	}
-	return ts, msg[to+1:]
+	var severity string
+	if msg[from] == '<' { // docker info messages start with '<', while errors start with 'g'
+		severity = "info"
+	} else {
+		severity = "error"
+	}
+	return ts, severity, msg[to+1:]
 }
 
 // wait lets the reader sleep for a bit

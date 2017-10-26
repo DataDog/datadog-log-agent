@@ -11,6 +11,9 @@ import (
 	"log"
 	"time"
 
+	"github.com/DataDog/datadog-agent/pkg/tagger"
+	dockerutil "github.com/DataDog/datadog-agent/pkg/util/docker"
+
 	"github.com/DataDog/datadog-log-agent/pkg/auditor"
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
@@ -117,6 +120,16 @@ func (c *ContainerInput) setup() error {
 		return fmt.Errorf("Can't initialize client")
 	}
 	containers := c.listContainers()
+
+	// Initialize docker utils
+	err = tagger.Init()
+	if err != nil {
+		log.Println(err)
+	}
+	dockerutil.InitDockerUtil(&dockerutil.Config{
+		CacheDuration:  10 * time.Second,
+		CollectNetwork: false,
+	})
 
 	// Start tailing monitored containers
 	sourceId := 0

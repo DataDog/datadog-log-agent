@@ -23,13 +23,15 @@ func (suite *DockerTailerTestSuite) SetupTest() {
 
 func (suite *DockerTailerTestSuite) TestDockerTailerRemovesDate() {
 	msgWithDate := []byte("<2006-01-12T01:01:01.000000000Z my message")
-	ts, msg := suite.tailer.parseMessage(msgWithDate)
+	ts, sev, msg := suite.tailer.parseMessage(msgWithDate)
 	suite.Equal("my message", string(msg))
+	suite.Equal("info", sev)
 	suite.Equal(time.Date(2006, time.January, 12, 1, 1, 1, 0, &time.Location{}).Second(), ts.Second())
 
 	msgWithDate = []byte("g2006-01-12T01:01:01.000000000Z my error")
-	ts, msg = suite.tailer.parseMessage(msgWithDate)
+	ts, sev, msg = suite.tailer.parseMessage(msgWithDate)
 	suite.Equal("my error", string(msg))
+	suite.Equal("error", sev)
 	suite.Equal(time.Date(2006, time.January, 12, 1, 1, 1, 0, &time.Location{}).Second(), ts.Second())
 
 	sameMsgInBytes := []byte{}
@@ -41,7 +43,7 @@ func (suite *DockerTailerTestSuite) TestDockerTailerRemovesDate() {
 	sameMsgInBytes = append(sameMsgInBytes, '0')
 	sameMsgInBytes = append(sameMsgInBytes, '0')
 	sameMsgInBytes = append(sameMsgInBytes, []byte("<2006-01-12T01:01:01.000000000Z my message")...)
-	ts, msg = suite.tailer.parseMessage(sameMsgInBytes)
+	ts, sev, msg = suite.tailer.parseMessage(sameMsgInBytes)
 	suite.Equal("my message", string(msg))
 	suite.Equal(time.Date(2006, time.January, 12, 1, 1, 1, 0, &time.Location{}).Second(), ts.Second())
 }
