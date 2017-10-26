@@ -162,6 +162,7 @@ func (dt *DockerTail) updatedDockerMessage(msg []byte) (time.Time, []byte) {
 
 	updatedMsg := fmt.Sprintf(
 		"{\"message\": \"%s\", \"timestamp\": %d, \"ddtags\": \"%s\", \"severity\": \"%s\"}",
+		// escape "???
 		parsedMsg,
 		ts.UnixNano()/int64(time.Millisecond),
 		strings.Join(tags, ","),
@@ -178,6 +179,7 @@ func (dt *DockerTail) parseMessage(msg []byte) (time.Time, string, []byte) {
 	from := bytes.IndexAny(msg, "<g")
 	to := bytes.Index(msg, []byte(" "))
 	ts, err := time.Parse(Datelayout, string(msg[from+1:to]))
+	// do we need to parse the date?
 
 	if err != nil {
 		log.Println(err)
