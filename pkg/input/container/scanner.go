@@ -77,7 +77,7 @@ func (c *ContainerInput) scan() {
 	// monitor new containers
 	for _, source := range c.sources {
 		for _, container := range containers {
-			if container.Image == source.Image {
+			if c.sourceShouldMonitorContainer(source, container) {
 				containersIds[container.ID] = true
 				if _, ok := c.tailers[container.ID]; !ok {
 					c.setupTailer(c.cli, container, source, true, c.outputChans[0])
@@ -104,6 +104,10 @@ func (c *ContainerInput) listContainers() []types.Container {
 		return []types.Container{}
 	}
 	return containers
+}
+
+func (c *ContainerInput) sourceShouldMonitorContainer(source *config.IntegrationConfigLogSource, container types.Container) bool {
+	return container.Image == source.Image
 }
 
 // Start starts the ContainerInput
@@ -136,7 +140,7 @@ func (c *ContainerInput) setup() error {
 
 	for _, source := range c.sources {
 		for _, container := range containers {
-			if container.Image == source.Image {
+			if c.sourceShouldMonitorContainer(source, container) {
 				if _, ok := c.tailers[container.ID]; ok {
 					log.Println("Can't tail container twice:", source.Image)
 				} else {
