@@ -162,8 +162,7 @@ func (dt *DockerTail) updatedDockerMessage(msg []byte) (*time.Time, []byte) {
 	}
 
 	updatedMsg := fmt.Sprintf(
-		"{\"message\": \"%s\", \"timestamp\": %d, \"ddtags\": \"%s\", \"severity\": \"%s\"}",
-		// escape "???
+		"{\"message\": %q, \"timestamp\": %d, \"ddtags\": %q, \"severity\": %q}",
 		parsedMsg,
 		ts.UnixNano()/int64(time.Millisecond),
 		strings.Join(tags, ","),
