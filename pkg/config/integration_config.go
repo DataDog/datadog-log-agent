@@ -40,9 +40,11 @@ type LogsProcessingRule struct {
 type IntegrationConfigLogSource struct {
 	Type string
 
-	Port  int    // Network
-	Path  string // File
+	Port int    // Network
+	Path string // File
+
 	Image string // Docker
+	Label string // Docker
 
 	Service         string
 	Logset          string
@@ -150,10 +152,6 @@ func validateSource(config IntegrationConfigLogSource) error {
 
 	if config.Type == UDP_TYPE && config.Port == 0 {
 		return fmt.Errorf("A udp source must have a port")
-	}
-
-	if config.Type == DOCKER_TYPE && config.Image == "" {
-		return fmt.Errorf("A docker source must have an image name")
 	}
 
 	return nil

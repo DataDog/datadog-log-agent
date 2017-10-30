@@ -108,13 +108,14 @@ func (c *ContainerInput) listContainers() []types.Container {
 }
 
 func (c *ContainerInput) sourceShouldMonitorContainer(source *config.IntegrationConfigLogSource, container types.Container) bool {
-	// “Image”: “eu.gcr.io/google_containers/defaultbackend@sha256:fb91f9395ddf44df1ca3adf68b25dcbc269e5d08ba14a40de9abdedafacf93d4",
-	// https://github.com/DataDog/datadog-agent/blob/master/pkg/util/docker/docker_util.go#L353-L385
-	// image_name: myapp
-	// image_tag: latest
-	// image_registry: ecs.aws.com
-	// label: toto.tata (exists)
-	return container.Image == source.Image
+	if source.Image != "" && container.Image != source.Image {
+		return false
+	}
+	if source.Label != "" {
+		_, ok := container.Labels[source.Label]
+		return ok
+	}
+	return true
 }
 
 // Start starts the ContainerInput

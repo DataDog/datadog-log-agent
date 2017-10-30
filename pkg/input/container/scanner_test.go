@@ -29,6 +29,18 @@ func (suite *ContainerScannerTestSuite) TestContainerScannerFilter() {
 	suite.True(suite.c.sourceShouldMonitorContainer(cfg, container))
 	container = types.Container{Image: "myapp2"}
 	suite.False(suite.c.sourceShouldMonitorContainer(cfg, container))
+
+	cfg = &config.IntegrationConfigLogSource{Type: config.DOCKER_TYPE, Label: "mylabel"}
+	l1 := make(map[string]string)
+	l2 := make(map[string]string)
+	l2["mylabel"] = "anything"
+	container = types.Container{Image: "myapp", Labels: l1}
+	suite.False(suite.c.sourceShouldMonitorContainer(cfg, container))
+	container = types.Container{Image: "myapp", Labels: l2}
+	suite.True(suite.c.sourceShouldMonitorContainer(cfg, container))
+
+	cfg = &config.IntegrationConfigLogSource{Type: config.DOCKER_TYPE}
+	suite.True(suite.c.sourceShouldMonitorContainer(cfg, container))
 }
 
 func TestContainerScannerTestSuite(t *testing.T) {
