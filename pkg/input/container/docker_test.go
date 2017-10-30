@@ -6,6 +6,7 @@
 package container
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -22,30 +23,33 @@ func (suite *DockerTailerTestSuite) SetupTest() {
 }
 
 func (suite *DockerTailerTestSuite) TestDockerTailerRemovesDate() {
-	msgWithDate := []byte("<2006-01-12T01:01:01.000000000Z my message")
-	ts, sev, msg := suite.tailer.parseMessage(msgWithDate)
+	curYear := time.Now().Year()
+	testDate := fmt.Sprintf("%d-01-12T01:01:01.000000000Z", curYear)
+	ts, msg := suite.tailer.parseMessage([]byte(fmt.Sprintf("<%s my message", testDate)))
 	suite.Equal("my message", string(msg))
-	suite.Equal("info", sev)
-	suite.Equal(time.Date(2006, time.January, 12, 1, 1, 1, 0, &time.Location{}).Second(), ts.Second())
+	suite.Equal(time.Date(curYear, time.January, 12, 1, 1, 1, 0, &time.Location{}).Year(), ts.Year())
 
-	msgWithDate = []byte("g2006-01-12T01:01:01.000000000Z my error")
-	ts, sev, msg = suite.tailer.parseMessage(msgWithDate)
+	ts, msg = suite.tailer.parseMessage([]byte(fmt.Sprintf("g%s my error", testDate)))
 	suite.Equal("my error", string(msg))
-	suite.Equal("error", sev)
-	suite.Equal(time.Date(2006, time.January, 12, 1, 1, 1, 0, &time.Location{}).Second(), ts.Second())
+	suite.Equal(time.Date(curYear, time.January, 12, 1, 1, 1, 0, &time.Location{}).Year(), ts.Year())
+
+	ts, msg = suite.tailer.parseMessage([]byte(fmt.Sprintf("0%s my message", testDate)))
+	suite.Equal("my message", string(msg))
+	suite.Equal(time.Date(curYear, time.January, 12, 1, 1, 1, 0, &time.Location{}).Year(), ts.Year())
+
+	ts, msg = suite.tailer.parseMessage([]byte(fmt.Sprintf("2%s my message", testDate)))
+	suite.Equal("my message", string(msg))
+	suite.Equal(time.Date(curYear, time.January, 12, 1, 1, 1, 0, &time.Location{}).Year(), ts.Year())
 
 	sameMsgInBytes := []byte{}
-	sameMsgInBytes = append(sameMsgInBytes, '1')
-	sameMsgInBytes = append(sameMsgInBytes, '0')
-	sameMsgInBytes = append(sameMsgInBytes, '0')
-	sameMsgInBytes = append(sameMsgInBytes, '0')
-	sameMsgInBytes = append(sameMsgInBytes, '0')
-	sameMsgInBytes = append(sameMsgInBytes, '0')
-	sameMsgInBytes = append(sameMsgInBytes, '0')
-	sameMsgInBytes = append(sameMsgInBytes, []byte("<2006-01-12T01:01:01.000000000Z my message")...)
-	ts, sev, msg = suite.tailer.parseMessage(sameMsgInBytes)
+	nullBytes := [1]byte{}
+	for i := 0; i < 5; i++ {
+		sameMsgInBytes = append(sameMsgInBytes, nullBytes[0])
+	}
+	sameMsgInBytes = append(sameMsgInBytes, []byte(fmt.Sprintf("0%s my message", testDate))...)
+	ts, msg = suite.tailer.parseMessage(sameMsgInBytes)
 	suite.Equal("my message", string(msg))
-	suite.Equal(time.Date(2006, time.January, 12, 1, 1, 1, 0, &time.Location{}).Second(), ts.Second())
+	suite.Equal(time.Date(curYear, time.January, 12, 1, 1, 1, 0, &time.Location{}).Year(), ts.Year())
 }
 
 func TestDockerTailerTestSuite(t *testing.T) {

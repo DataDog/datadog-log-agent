@@ -86,9 +86,10 @@ func (dt *DockerTail) startReading(from time.Time) error {
 		ShowStderr: true,
 		Follow:     true,
 		Timestamps: true,
+		Details:    false,
 		Since:      from.Format("2006-01-02T15:04:05"),
 	}
-
+	// FIXME: tail stderr and stdout separately
 	reader, err := dt.cli.ContainerLogs(context.Background(), dt.containerName, options)
 	if err != nil {
 		return err
@@ -145,15 +146,15 @@ func (dt *DockerTail) forwardMessages() {
 		containerMsg := message.NewContainerMessage(updatedMsg)
 		msgOrigin := message.NewOrigin()
 		msgOrigin.LogSource = dt.source
-		msgOrigin.Timestamp = &ts
+		msgOrigin.Timestamp = ts
 		msgOrigin.Identifier = dt.containerName
 		containerMsg.SetOrigin(msgOrigin)
 		dt.outputChan <- containerMsg
 	}
 }
 
-func (dt *DockerTail) updatedDockerMessage(msg []byte) (time.Time, []byte) {
-	ts, severity, parsedMsg := dt.parseMessage(msg)
+func (dt *DockerTail) updatedDockerMessage(msg []byte) (*time.Time, []byte) {
+	ts, parsedMsg := dt.parseMessage(msg)
 	tags, err := tagger.Tag(dockerutil.ContainerIDToEntityName(dt.containerName), false)
 
 	if err != nil {
@@ -166,32 +167,52 @@ func (dt *DockerTail) updatedDockerMessage(msg []byte) (time.Time, []byte) {
 		parsedMsg,
 		ts.UnixNano()/int64(time.Millisecond),
 		strings.Join(tags, ","),
-		severity,
+		"info",
 	)
 	return ts, []byte(updatedMsg)
 }
 
 // parseMessage extracts the date from the raw docker message, which looks like
-// <2006-01-12T01:01:01.000000000Z my message
-func (dt *DockerTail) parseMessage(msg []byte) (time.Time, string, []byte) {
-	// Note: We have some null bytes at the beginning of msg,
-	// thus looking for the first '<'
-	from := bytes.IndexAny(msg, "<g")
-	to := bytes.Index(msg, []byte(" "))
-	ts, err := time.Parse(Datelayout, string(msg[from+1:to]))
-	// do we need to parse the date?
+// XXXXY2006-01-12T01:01:01.000000000Z my message
+// X and Y represent some null bytes and a random byte at the beginning of the message
+func (dt *DockerTail) parseMessage(msg []byte) (*time.Time, []byte) {
+	// We have some random bytes at the beginning of msg, let's skip till we hit the date
+	// which starts with a number.
+	// If the random byte is a number, we'll get a date far in the past or future, so we can exclude this
+	from := bytes.IndexAny(msg, "987654321")
+	if from == -1 {
+		return nil, msg
+	}
 
+	to := bytes.Index(msg[from:], []byte{' '})
+	if to == -1 {
+		return nil, msg
+	}
+	to = from + to
+
+	ts, err := time.Parse(Datelayout, string(msg[from:to]))
+	correctedTs, err := dt.correctDate(msg[from:to], &ts, err)
 	if err != nil {
 		log.Println(err)
-		return ts, "", msg
+		return nil, msg
 	}
-	var severity string
-	if msg[from] == '<' { // docker info messages start with '<', while errors start with 'g'
-		severity = "info"
-	} else {
-		severity = "error"
+	return correctedTs, msg[to+1:]
+}
+
+// Because of the random byte inserted before the date, the date can be wrongly parsed
+// if that random byte is a number. When we get a unexpected date, let's retry by dropping the first
+// byte, and see if result is relevant
+func (dt *DockerTail) correctDate(msg []byte, ts *time.Time, err error) (*time.Time, error) {
+	curYear := time.Now().Year()
+	computedYear := ts.Year()
+	if curYear < computedYear-1 || curYear > computedYear+1 {
+		correctedTs, err := time.Parse(Datelayout, string(msg[1:]))
+		if err != nil {
+			return nil, err
+		}
+		return &correctedTs, nil
 	}
-	return ts, severity, msg[to+1:]
+	return ts, err
 }
 
 // wait lets the reader sleep for a bit
