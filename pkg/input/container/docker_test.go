@@ -15,11 +15,11 @@ import (
 
 type DockerTailerTestSuite struct {
 	suite.Suite
-	tailer *DockerTail
+	tailer *DockerStdTailer
 }
 
 func (suite *DockerTailerTestSuite) SetupTest() {
-	suite.tailer = &DockerTail{}
+	suite.tailer = &DockerStdTailer{}
 }
 
 func (suite *DockerTailerTestSuite) TestDockerTailerRemovesDate() {

@@ -28,7 +28,7 @@ const DOCKER_API_VERSION = "1.25"
 type ContainerInput struct {
 	outputChans [](chan message.Message)
 	sources     []*config.IntegrationConfigLogSource
-	tailers     map[string]*DockerTail
+	tailers     map[string]*DockerTailer
 	cli         *client.Client
 	auditor     *auditor.Auditor
 }
@@ -48,7 +48,7 @@ func New(sources []*config.IntegrationConfigLogSource, outputChans [](chan messa
 	return &ContainerInput{
 		outputChans: outputChans,
 		sources:     containerSources,
-		tailers:     make(map[string]*DockerTail),
+		tailers:     make(map[string]*DockerTailer),
 		auditor:     a,
 	}
 }
