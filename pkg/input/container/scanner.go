@@ -22,6 +22,7 @@ import (
 )
 
 const scanPeriod = 10 * time.Second
+const DOCKER_API_VERSION = "1.25"
 
 // A ContainerInput listens for stdout and stderr of containers
 type ContainerInput struct {
@@ -123,7 +124,10 @@ func (c *ContainerInput) setup() error {
 	}
 
 	// List available containers
+
 	cli, err := client.NewEnvClient()
+	// Docker's api updates quickly and is pretty unstable, best pinpoint it
+	cli.UpdateClientVersion(DOCKER_API_VERSION)
 	c.cli = cli
 	if err != nil {
 		log.Println("Can't tail containers,", err)
