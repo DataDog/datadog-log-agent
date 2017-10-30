@@ -171,7 +171,7 @@ func (c *ContainerInput) setupTailer(cli *client.Client, container types.Contain
 	if tailFromBegining {
 		err = t.tailFromBegining()
 	} else {
-		err = t.tailFrom(*c.auditor.GetLastCommitedTimestamp(container.ID))
+		err = t.recoverTailing(c.auditor)
 	}
 	if err != nil {
 		log.Println(err)

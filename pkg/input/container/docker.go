@@ -17,6 +17,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/tagger"
 	dockerutil "github.com/DataDog/datadog-agent/pkg/util/docker"
 
+	"github.com/DataDog/datadog-log-agent/pkg/auditor"
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/decoder"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
@@ -76,6 +77,12 @@ func (dt *DockerTail) tailFrom(from time.Time) error {
 	dt.d.Start()
 	go dt.forwardMessages()
 	return dt.startReading(from)
+}
+
+// recoverTailing starts the tailing from the last log line processed, or now
+// if we see this container for the first time
+func (dt *DockerTail) recoverTailing(a *auditor.Auditor) error {
+	return dt.tailFrom(*c.auditor.GetLastCommitedTimestamp(dt.containerName))
 }
 
 // startReading starts the reader that reads the container's stdout,
