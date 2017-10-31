@@ -84,8 +84,11 @@ func (t *Tailer) onStop() {
 // tailFrom let's the tailer open a file and tail from whence
 func (t *Tailer) tailFrom(offset int64, whence int) error {
 	t.d.Start()
-	go t.forwardMessages()
-	return t.startReading(offset, whence)
+	err := t.startReading(offset, whence)
+	if err == nil {
+		go t.forwardMessages()
+	}
+	return err
 }
 
 func (t *Tailer) startReading(offset int64, whence int) error {
@@ -112,7 +115,7 @@ func (t *Tailer) tailFromBegining() error {
 	return t.tailFrom(0, os.SEEK_SET)
 }
 
-// tailFromBegining lets the tailer start tailing its file
+// tailFromEnd lets the tailer start tailing its file
 // from the end
 func (t *Tailer) tailFromEnd() error {
 	return t.tailFrom(0, os.SEEK_END)
@@ -135,10 +138,15 @@ func (t *Tailer) forwardMessages() {
 
 		fileMsg := message.NewFileMessage(msg.Content())
 		msgOffset := msg.GetOrigin().Offset
+		identifier := t.source.Path
 		if !t.shouldTrackOffset {
 			msgOffset = 0
+			identifier = ""
 		}
-		msgOrigin := message.NewOrigin(t.source, msgOffset)
+		msgOrigin := message.NewOrigin()
+		msgOrigin.LogSource = t.source
+		msgOrigin.Identifier = identifier
+		msgOrigin.Offset = msgOffset
 		fileMsg.SetOrigin(msgOrigin)
 		t.outputChan <- fileMsg
 	}

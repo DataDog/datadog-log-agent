@@ -76,7 +76,9 @@ func (d *Decoder) sendBuffuredMessage(offset int64) {
 	copy(msg, d.msgBuffer.Bytes())
 	if len(msg) > 0 {
 		m := message.NewMessage(msg)
-		m.SetOrigin(message.NewOriginFromOffset(offset))
+		o := message.NewOrigin()
+		o.Offset = offset
+		m.SetOrigin(o)
 		d.OutputChan <- m
 	}
 	d.msgBuffer.Reset()

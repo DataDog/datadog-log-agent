@@ -8,6 +8,7 @@ package main
 import (
 	"github.com/DataDog/datadog-log-agent/pkg/auditor"
 	"github.com/DataDog/datadog-log-agent/pkg/config"
+	"github.com/DataDog/datadog-log-agent/pkg/input/container"
 	"github.com/DataDog/datadog-log-agent/pkg/input/listener"
 	"github.com/DataDog/datadog-log-agent/pkg/input/tailer"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
@@ -66,4 +67,10 @@ func Start() {
 
 	s := tailer.New(config.GetLogsSources(), filePipelinesEntryChannels, a)
 	s.Start()
+
+	// FIXME: As we have now 3 sources of logs, the comment on pipelines is not
+	// accurate anymore. We need a better design for which pipeline to use
+	// for any source
+	c := container.New(config.GetLogsSources(), filePipelinesEntryChannels, a)
+	c.Start()
 }

@@ -25,9 +25,9 @@ const defaultTTL = 23 * time.Hour
 // A RegistryEntry represends an entry in the registry where we keep track
 // of current offsets
 type RegistryEntry struct {
-	Path      string
-	Timestamp time.Time
-	Offset    int64
+	Offset      int64
+	Timestamp   time.Time
+	LastUpdated time.Time
 }
 
 // An Auditor handles messages successfully submitted to the intake
@@ -94,32 +94,29 @@ func (a *Auditor) cleanupRegistryPeriodically() {
 // run lets the auditor update the registry
 func (a *Auditor) run() {
 	for msg := range a.inputChan {
-		// An offset of 0 means that we don't want to store the offset for that origin.
+		// An empty Identifier means we don't want to track down the offset
 		// This is useful for origins that don't have offsets (networks), or when we
 		// specially want to avoid storing the offset
-		if msg.GetOrigin().Offset > 0 {
-			a.updateRegistry(msg.GetOrigin().LogSource.Path, msg.GetOrigin().Offset)
+		if msg.GetOrigin().Identifier != "" {
+			a.updateRegistry(msg.GetOrigin().Identifier, msg.GetOrigin().Offset, msg.GetOrigin().Timestamp)
 		}
 	}
 }
 
-// updateRegistry updates the offset of path in the auditor's registry
-func (a *Auditor) updateRegistry(path string, offset int64) {
+// updateRegistry updates the offset of identifier in the auditor's registry
+func (a *Auditor) updateRegistry(identifier string, offset int64, timestamp *time.Time) {
 	a.registryMutex.Lock()
 	defer a.registryMutex.Unlock()
-	entry, ok := a.registry[path]
-	if !ok {
-		a.registry[path] = &RegistryEntry{
-			Path:      path,
-			Timestamp: time.Now(),
-			Offset:    offset,
-		}
-	} else {
-		if entry.Offset != offset {
-			entry.Timestamp = time.Now()
-			entry.Offset = offset
-		}
+
+	entry := &RegistryEntry{
+		LastUpdated: time.Now(),
+		Offset:      offset,
 	}
+	if timestamp != nil {
+		entry.Timestamp = *timestamp
+	}
+
+	a.registry[identifier] = entry
 }
 
 // recoverRegistry rebuilds the registry from the state file found at path
@@ -158,14 +155,24 @@ func (a *Auditor) flushRegistry(registry map[string]*RegistryEntry, path string)
 	return ioutil.WriteFile(path, mr, 0644)
 }
 
-// GetLastCommitedOffset returns the last commited offset for a given source
-func (a *Auditor) GetLastCommitedOffset(source *config.IntegrationConfigLogSource) (int64, int) {
+// GetLastCommitedOffset returns the last commited offset for a given identifier
+func (a *Auditor) GetLastCommitedOffset(identifier string) (int64, int) {
 	r := a.readOnlyRegistryCopy(a.registry)
-	entry, ok := r[source.Path]
+	entry, ok := r[identifier]
 	if !ok {
 		return 0, os.SEEK_END
 	}
 	return entry.Offset, os.SEEK_CUR
+}
+
+// GetLastCommitedTimestamp returns the last commited offset for a given identifier
+func (a *Auditor) GetLastCommitedTimestamp(identifier string) *time.Time {
+	r := a.readOnlyRegistryCopy(a.registry)
+	entry, ok := r[identifier]
+	if !ok {
+		return &time.Time{}
+	}
+	return &entry.Timestamp
 }
 
 // cleanupRegistry removes expired entries from the registry
@@ -174,7 +181,7 @@ func (a *Auditor) cleanupRegistry(registry map[string]*RegistryEntry) {
 	a.registryMutex.Lock()
 	defer a.registryMutex.Unlock()
 	for path, entry := range registry {
-		if entry.Timestamp.Before(expireBefore) {
+		if entry.LastUpdated.Before(expireBefore) {
 			delete(registry, path)
 		}
 	}
