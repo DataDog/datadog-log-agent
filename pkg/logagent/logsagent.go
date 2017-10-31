@@ -68,8 +68,9 @@ func Start() {
 	s := tailer.New(config.GetLogsSources(), filePipelinesEntryChannels, a)
 	s.Start()
 
-	// fixme: this is not great, we share the same pipelines as tailers.
-	// they can easily get overloaded, we'd need a better design
+	// FIXME: As we have now 3 sources of logs, the comment on pipelines is not
+	// accurate anymore. We need a better design for which pipeline to use
+	// for any source
 	c := container.New(config.GetLogsSources(), filePipelinesEntryChannels, a)
 	c.Start()
 }
