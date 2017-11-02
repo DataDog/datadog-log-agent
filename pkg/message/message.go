@@ -19,8 +19,10 @@ type Message interface {
 
 // MessageOrigin represents the Origin of a message
 type MessageOrigin struct {
-	LogSource *config.IntegrationConfigLogSource
-	Offset    int64
+	Identifier string
+	LogSource  *config.IntegrationConfigLogSource
+	Offset     int64
+	Timestamp  string
 }
 
 type message struct {
@@ -89,6 +91,17 @@ type NetworkMessage struct {
 
 func NewNetworkMessage(content []byte) *NetworkMessage {
 	return &NetworkMessage{
+		message: NewMessage(content),
+	}
+}
+
+// ContainerMessage is a message coming from a container Source
+type ContainerMessage struct {
+	*message
+}
+
+func NewContainerMessage(content []byte) *ContainerMessage {
+	return &ContainerMessage{
 		message: NewMessage(content),
 	}
 }

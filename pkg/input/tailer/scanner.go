@@ -62,7 +62,7 @@ func (s *Scanner) setupTailer(source *config.IntegrationConfigLogSource, tailFro
 		err = t.tailFromBegining()
 	} else {
 		// resume tailing from last commited offset
-		err = t.tailFrom(s.auditor.GetLastCommitedOffset(t.source))
+		err = t.tailFrom(s.auditor.GetLastCommitedOffset(t.source.Path))
 	}
 	if err != nil {
 		log.Println(err)

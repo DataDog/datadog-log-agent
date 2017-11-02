@@ -138,11 +138,14 @@ func (t *Tailer) forwardMessages() {
 
 		fileMsg := message.NewFileMessage(msg.Content())
 		msgOffset := msg.GetOrigin().Offset
+		identifier := t.source.Path
 		if !t.shouldTrackOffset {
 			msgOffset = 0
+			identifier = ""
 		}
 		msgOrigin := message.NewOrigin()
 		msgOrigin.LogSource = t.source
+		msgOrigin.Identifier = identifier
 		msgOrigin.Offset = msgOffset
 		fileMsg.SetOrigin(msgOrigin)
 		t.outputChan <- fileMsg
