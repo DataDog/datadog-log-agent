@@ -95,8 +95,11 @@ func TestComputeExtraContent(t *testing.T) {
 	extraContent = p.computeExtraContent(message.NewNetworkMessage([]byte("message"), source))
 	extraContentParts = strings.Split(string(extraContent), " ")
 	assert.Equal(t, 8, len(extraContentParts))
-	format := "2006-01-02T15:04:05"
-	assert.Equal(t, time.Now().UTC().Format(format), extraContentParts[1][:len(format)])
+	// Pick the date string from the extra content parts and make sure it's within 1mn of the UTC time
+	const format = "2006-01-02T15:04:05"
+	timestamp, err := time.Parse(format, extraContentParts[1][:len(format)])
+	assert.Nil(t, err)
+	assert.True(t, time.Since(timestamp).Minutes() < 1)
 
 	extraContent = p.computeExtraContent(message.NewNetworkMessage([]byte("<message"), source))
 	assert.Nil(t, extraContent)
