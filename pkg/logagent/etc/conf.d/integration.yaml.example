@@ -2,7 +2,7 @@ init_config:
 
 instances:
   - whatever: anything
-  
+
 logs:
   - type: file
     path: /home/vagrant/logrotate/tail.log
@@ -17,3 +17,10 @@ logs:
   - type: udp
     logset: playground2
     port: 10515
+
+  - type: docker
+    image: myapp
+    image_name: myapp
+    image_tag: latest
+    image_registry: ecs.aws.com
+    label: toto.tata (exists)
