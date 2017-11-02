@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
@@ -88,10 +89,14 @@ func TestRedacting(t *testing.T) {
 func TestComputeExtraContent(t *testing.T) {
 	p := NewTestProcessor()
 	var extraContent []byte
+	var extraContentParts []string
 
 	source := &config.IntegrationConfigLogSource{TagsPayload: []byte{'-'}}
 	extraContent = p.computeExtraContent(message.NewNetworkMessage([]byte("message"), source))
-	assert.Equal(t, 8, len(strings.Split(string(extraContent), " ")))
+	extraContentParts = strings.Split(string(extraContent), " ")
+	assert.Equal(t, 8, len(extraContentParts))
+	format := "2006-01-02T15:04:05"
+	assert.Equal(t, time.Now().UTC().Format(format), extraContentParts[1][:len(format)])
 
 	extraContent = p.computeExtraContent(message.NewNetworkMessage([]byte("<message"), source))
 	assert.Nil(t, extraContent)
