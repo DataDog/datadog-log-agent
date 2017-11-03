@@ -6,6 +6,7 @@
 package processor
 
 import (
+	"math"
 	"regexp"
 	"strings"
 	"testing"
@@ -99,7 +100,7 @@ func TestComputeExtraContent(t *testing.T) {
 	const format = "2006-01-02T15:04:05"
 	timestamp, err := time.Parse(format, extraContentParts[1][:len(format)])
 	assert.Nil(t, err)
-	assert.True(t, time.Since(timestamp).Minutes() < 1)
+	assert.True(t, math.Abs(time.Now().UTC().Sub(timestamp).Minutes()) < 1)
 
 	extraContent = p.computeExtraContent(message.NewNetworkMessage([]byte("<message"), source))
 	assert.Nil(t, extraContent)
