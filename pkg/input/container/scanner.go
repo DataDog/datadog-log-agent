@@ -65,15 +65,17 @@ func (c *ContainerInput) Start() {
 func (c *ContainerInput) run() {
 	ticker := time.NewTicker(scanPeriod)
 	for _ = range ticker.C {
-		c.scan()
+		c.scan(true)
 	}
 }
 
 // scan checks for new containers we're expected to
 // tail, as well as stopped containers
-func (c *ContainerInput) scan() {
+func (c *ContainerInput) scan(tailFromBegining bool) {
 	containers := c.listContainers()
 	containersIds := make(map[string]bool)
+
+	sourceId := 0
 
 	// monitor new containers
 	for _, source := range c.sources {
@@ -81,7 +83,8 @@ func (c *ContainerInput) scan() {
 			if c.sourceShouldMonitorContainer(source, container) {
 				containersIds[container.ID] = true
 				if _, ok := c.tailers[container.ID]; !ok {
-					c.setupTailer(c.cli, container, source, true, c.outputChans[0])
+					sourceId = (sourceId + 1) % len(c.outputChans)
+					c.setupTailer(c.cli, container, source, tailFromBegining, c.outputChans[sourceId%len(c.outputChans)])
 				}
 			}
 		}
@@ -134,7 +137,6 @@ func (c *ContainerInput) setup() error {
 		log.Println("Can't tail containers,", err)
 		return fmt.Errorf("Can't initialize client")
 	}
-	containers := c.listContainers()
 
 	// Initialize docker utils
 	err = tagger.Init()
@@ -147,20 +149,7 @@ func (c *ContainerInput) setup() error {
 	})
 
 	// Start tailing monitored containers
-	sourceId := 0
-
-	for _, source := range c.sources {
-		for _, container := range containers {
-			if c.sourceShouldMonitorContainer(source, container) {
-				if _, ok := c.tailers[container.ID]; ok {
-					log.Println("Can't tail container twice:", source.Image)
-				} else {
-					sourceId = (sourceId + 1) % len(c.outputChans)
-					c.setupTailer(c.cli, container, source, false, c.outputChans[sourceId%len(c.outputChans)])
-				}
-			}
-		}
-	}
+	c.scan(false)
 	return nil
 }
 
