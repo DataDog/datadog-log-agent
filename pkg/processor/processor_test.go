@@ -6,9 +6,11 @@
 package processor
 
 import (
+	"math"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
@@ -88,10 +90,17 @@ func TestRedacting(t *testing.T) {
 func TestComputeExtraContent(t *testing.T) {
 	p := NewTestProcessor()
 	var extraContent []byte
+	var extraContentParts []string
 
 	source := &config.IntegrationConfigLogSource{TagsPayload: []byte{'-'}}
 	extraContent = p.computeExtraContent(message.NewNetworkMessage([]byte("message"), source))
-	assert.Equal(t, 8, len(strings.Split(string(extraContent), " ")))
+	extraContentParts = strings.Split(string(extraContent), " ")
+	assert.Equal(t, 8, len(extraContentParts))
+	// Pick the date string from the extra content parts and make sure it's within 1mn of the UTC time
+	const format = "2006-01-02T15:04:05"
+	timestamp, err := time.Parse(format, extraContentParts[1][:len(format)])
+	assert.Nil(t, err)
+	assert.True(t, math.Abs(time.Now().UTC().Sub(timestamp).Minutes()) < 1)
 
 	extraContent = p.computeExtraContent(message.NewNetworkMessage([]byte("<message"), source))
 	assert.Nil(t, extraContent)

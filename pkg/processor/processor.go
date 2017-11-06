@@ -68,7 +68,7 @@ func (p *Processor) computeExtraContent(msg message.Message) []byte {
 		if len(msg.Content()) > 0 && msg.Content()[0] != '<' {
 			// fit RFC5424
 			// <%pri%>%protocol-version% %timestamp:::date-rfc3339% %HOSTNAME% %$!new-appname% - - - %msg%\n
-			timestamp := time.Now().Format("2006-01-02T15:04:05.000000+00:00")
+			timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000000+00:00")
 			extraContent := []byte("<46>0 ")
 			extraContent = append(extraContent, []byte(timestamp)...)
 			extraContent = append(extraContent, ' ')
