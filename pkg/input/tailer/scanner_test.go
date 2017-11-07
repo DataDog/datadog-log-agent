@@ -14,6 +14,7 @@ import (
 	"github.com/DataDog/datadog-log-agent/pkg/auditor"
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
+	"github.com/DataDog/datadog-log-agent/pkg/pipeline"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -26,11 +27,16 @@ type ScannerTestSuite struct {
 	testRotatedFile *os.File
 
 	outputChan chan message.Message
+	pp         *pipeline.PipelineProvider
 	sources    []*config.IntegrationConfigLogSource
 	s          *Scanner
 }
 
 func (suite *ScannerTestSuite) SetupTest() {
+	suite.pp = pipeline.NewPipelineProvider()
+	suite.pp.MockPipelineChans()
+	suite.outputChan = suite.pp.NextPipelineChan()
+
 	suite.testDir = "tests/scanner"
 	os.Remove(suite.testDir)
 	os.MkdirAll(suite.testDir, os.ModeDir)
@@ -44,10 +50,8 @@ func (suite *ScannerTestSuite) SetupTest() {
 	suite.Nil(err)
 	suite.testRotatedFile = f
 
-	suite.outputChan = make(chan message.Message, 10)
-	outputChans := [](chan message.Message){suite.outputChan}
 	suite.sources = []*config.IntegrationConfigLogSource{&config.IntegrationConfigLogSource{Type: config.FILE_TYPE, Path: suite.testPath}}
-	suite.s = New(suite.sources, outputChans, auditor.New(nil))
+	suite.s = New(suite.sources, suite.pp, auditor.New(nil))
 	suite.s.setup()
 	for _, tl := range suite.s.tailers {
 		tl.sleepMutex.Lock()

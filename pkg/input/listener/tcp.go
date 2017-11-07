@@ -11,7 +11,7 @@ import (
 	"net"
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
-	"github.com/DataDog/datadog-log-agent/pkg/message"
+	"github.com/DataDog/datadog-log-agent/pkg/pipeline"
 )
 
 // A TcpListener listens to bytes on a tcp connection and sends log lines to
@@ -22,7 +22,7 @@ type TcpListener struct {
 }
 
 // NewTcpListener returns an initialized NewTcpListener
-func NewTcpListener(outputChan chan message.Message, source *config.IntegrationConfigLogSource) (*AbstractNetworkListener, error) {
+func NewTcpListener(pp *pipeline.PipelineProvider, source *config.IntegrationConfigLogSource) (*AbstractNetworkListener, error) {
 	log.Println("Starting TCP forwarder on port", source.Port)
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", source.Port))
@@ -33,9 +33,9 @@ func NewTcpListener(outputChan chan message.Message, source *config.IntegrationC
 		listener: listener,
 	}
 	anl := &AbstractNetworkListener{
-		listener:   tcpListener,
-		outputChan: outputChan,
-		source:     source,
+		listener: tcpListener,
+		pp:       pp,
+		source:   source,
 	}
 	tcpListener.anl = anl
 	return anl, nil

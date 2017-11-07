@@ -12,17 +12,12 @@ import (
 	"github.com/DataDog/datadog-log-agent/pkg/input/listener"
 	"github.com/DataDog/datadog-log-agent/pkg/input/tailer"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
-	"github.com/DataDog/datadog-log-agent/pkg/processor"
+	"github.com/DataDog/datadog-log-agent/pkg/pipeline"
 	"github.com/DataDog/datadog-log-agent/pkg/sender"
 )
 
-const numberOfPipelines = 4
-const chanSizes = 100
-
 // Start starts the forwarder
 func Start() {
-
-	pipelinesEntryChannels := [](chan message.Message){}
 
 	cm := sender.NewConnectionManager(
 		config.LogsAgent.GetString("log_dd_url"),
@@ -30,46 +25,19 @@ func Start() {
 		config.LogsAgent.GetBool("skip_ssl_validation"),
 	)
 
-	auditorChan := make(chan message.Message, chanSizes)
+	auditorChan := make(chan message.Message, config.ChanSizes)
 	a := auditor.New(auditorChan)
 	a.Start()
 
-	for i := 0; i < numberOfPipelines; i++ {
+	pp := pipeline.NewPipelineProvider()
+	pp.Start(cm, auditorChan)
 
-		senderChan := make(chan message.Message, chanSizes)
-		f := sender.New(senderChan, auditorChan, cm)
-		f.Start()
-
-		processorChan := make(chan message.Message, chanSizes)
-		p := processor.New(
-			processorChan,
-			senderChan,
-			config.LogsAgent.GetString("api_key"),
-			config.LogsAgent.GetString("logset"),
-		)
-		p.Start()
-
-		pipelinesEntryChannels = append(pipelinesEntryChannels, processorChan)
-	}
-
-	// We want to share the load evenly on the pipelines for network and file sources.
-	// A simple way to do so is to use the same channels but in a different order
-	// This guarantees it will be almost evenly balanced, while keeping the logic simple.
-	// If we need a third source at some point, we will need a better strategy
-	filePipelinesEntryChannels := [](chan message.Message){}
-	for i := numberOfPipelines - 1; i >= 0; i-- {
-		filePipelinesEntryChannels = append(filePipelinesEntryChannels, pipelinesEntryChannels[i])
-	}
-	networkPipelinesEntryChannels := pipelinesEntryChannels
-
-	l := listener.New(config.GetLogsSources(), networkPipelinesEntryChannels)
+	l := listener.New(config.GetLogsSources(), pp)
 	l.Start()
 
-	s := tailer.New(config.GetLogsSources(), filePipelinesEntryChannels, a)
+	s := tailer.New(config.GetLogsSources(), pp, a)
 	s.Start()
 
-	// fixme: this is not great, we share the same pipelines as tailers.
-	// they can easily get overloaded, we'd need a better design
-	c := container.New(config.GetLogsSources(), filePipelinesEntryChannels, a)
+	c := container.New(config.GetLogsSources(), pp, a)
 	c.Start()
 }

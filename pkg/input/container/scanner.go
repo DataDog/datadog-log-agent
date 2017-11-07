@@ -17,6 +17,7 @@ import (
 	"github.com/DataDog/datadog-log-agent/pkg/auditor"
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
+	"github.com/DataDog/datadog-log-agent/pkg/pipeline"
 	"github.com/docker/docker/api/types"
 	"github.com/moby/moby/client"
 )
@@ -26,15 +27,15 @@ const DOCKER_API_VERSION = "1.25"
 
 // A ContainerInput listens for stdout and stderr of containers
 type ContainerInput struct {
-	outputChans [](chan message.Message)
-	sources     []*config.IntegrationConfigLogSource
-	tailers     map[string]*DockerTailer
-	cli         *client.Client
-	auditor     *auditor.Auditor
+	pp      *pipeline.PipelineProvider
+	sources []*config.IntegrationConfigLogSource
+	tailers map[string]*DockerTailer
+	cli     *client.Client
+	auditor *auditor.Auditor
 }
 
 // New returns an initialized ContainerInput
-func New(sources []*config.IntegrationConfigLogSource, outputChans [](chan message.Message), a *auditor.Auditor) *ContainerInput {
+func New(sources []*config.IntegrationConfigLogSource, pp *pipeline.PipelineProvider, a *auditor.Auditor) *ContainerInput {
 
 	containerSources := []*config.IntegrationConfigLogSource{}
 	for _, source := range sources {
@@ -46,10 +47,10 @@ func New(sources []*config.IntegrationConfigLogSource, outputChans [](chan messa
 	}
 
 	return &ContainerInput{
-		outputChans: outputChans,
-		sources:     containerSources,
-		tailers:     make(map[string]*DockerTailer),
-		auditor:     a,
+		pp:      pp,
+		sources: containerSources,
+		tailers: make(map[string]*DockerTailer),
+		auditor: a,
 	}
 }
 
@@ -75,16 +76,13 @@ func (c *ContainerInput) scan(tailFromBegining bool) {
 	containers := c.listContainers()
 	containersIds := make(map[string]bool)
 
-	sourceId := 0
-
 	// monitor new containers
 	for _, source := range c.sources {
 		for _, container := range containers {
 			if c.sourceShouldMonitorContainer(source, container) {
 				containersIds[container.ID] = true
 				if _, ok := c.tailers[container.ID]; !ok {
-					sourceId = (sourceId + 1) % len(c.outputChans)
-					c.setupTailer(c.cli, container, source, tailFromBegining, c.outputChans[sourceId%len(c.outputChans)])
+					c.setupTailer(c.cli, container, source, tailFromBegining, c.pp.NextPipelineChan())
 				}
 			}
 		}

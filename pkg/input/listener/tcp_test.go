@@ -12,6 +12,7 @@ import (
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
+	"github.com/DataDog/datadog-log-agent/pkg/pipeline"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -21,14 +22,17 @@ type TCPTestSuite struct {
 	suite.Suite
 
 	outputChan chan message.Message
+	pp         *pipeline.PipelineProvider
 	source     *config.IntegrationConfigLogSource
 	tcpl       *AbstractNetworkListener
 }
 
 func (suite *TCPTestSuite) SetupTest() {
-	suite.outputChan = make(chan message.Message, 10)
+	suite.pp = pipeline.NewPipelineProvider()
+	suite.pp.MockPipelineChans()
+	suite.outputChan = suite.pp.NextPipelineChan()
 	suite.source = &config.IntegrationConfigLogSource{Type: config.TCP_TYPE, Port: TCP_TEST_PORT}
-	tcpl, err := NewTcpListener(suite.outputChan, suite.source)
+	tcpl, err := NewTcpListener(suite.pp, suite.source)
 	suite.Nil(err)
 	suite.tcpl = tcpl
 	suite.tcpl.Start()
