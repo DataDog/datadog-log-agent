@@ -84,12 +84,29 @@ func (suite *AuditorTestSuite) TestAuditorRecoversRegistryForOffset() {
 	suite.a.registry[suite.source.Path] = &RegistryEntry{
 		Offset: 42,
 	}
+
 	offset, whence := suite.a.GetLastCommitedOffset(suite.source.Path)
 	suite.Equal(int64(42), offset)
 	suite.Equal(os.SEEK_CUR, whence)
 
 	othersource := &config.IntegrationConfigLogSource{Path: "anotherpath"}
 	offset, whence = suite.a.GetLastCommitedOffset(othersource.Path)
+	suite.Equal(int64(0), offset)
+	suite.Equal(os.SEEK_END, whence)
+}
+
+func (suite *AuditorTestSuite) TestAuditorRecoversRegistryForOffsetV0() {
+	suite.a.registry = make(map[string]*RegistryEntry)
+	suite.a.registry[suite.source.Path] = &RegistryEntry{
+		Offset: 42,
+	}
+
+	offset, whence := suite.a.GetLastCommitedOffset(fmt.Sprintf("file:%s", suite.source.Path))
+	suite.Equal(int64(42), offset)
+	suite.Equal(os.SEEK_CUR, whence)
+
+	othersource := &config.IntegrationConfigLogSource{Path: "anotherpath"}
+	offset, whence = suite.a.GetLastCommitedOffset(fmt.Sprintf("file:%s", othersource.Path))
 	suite.Equal(int64(0), offset)
 	suite.Equal(os.SEEK_END, whence)
 }

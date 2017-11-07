@@ -56,6 +56,11 @@ func NewDockerTailer(cli *client.Client, container types.Container, source *conf
 	}
 }
 
+// Identifier returns a string that uniquely identifies a source
+func (dt *DockerTailer) Identifier() string {
+	return fmt.Sprintf("docker:%s", dt.containerName)
+}
+
 // Stop stops the DockerTailer
 func (dt *DockerTailer) Stop() {
 	dt.shouldStop = true
@@ -77,7 +82,7 @@ func (dt *DockerTailer) tailFromEnd() error {
 // recoverTailing starts the tailing from the last log line processed, or now
 // if we see this container for the first time
 func (dt *DockerTailer) recoverTailing(a *auditor.Auditor) error {
-	return dt.tailFrom(a.GetLastCommitedTimestamp(dt.containerName))
+	return dt.tailFrom(a.GetLastCommitedTimestamp(dt.Identifier()))
 }
 
 // tailFrom starts the tailing from the specified time
@@ -155,7 +160,7 @@ func (dt *DockerTailer) forwardMessages() {
 		msgOrigin := message.NewOrigin()
 		msgOrigin.LogSource = dt.source
 		msgOrigin.Timestamp = ts
-		msgOrigin.Identifier = dt.containerName
+		msgOrigin.Identifier = dt.Identifier()
 		containerMsg.SetOrigin(msgOrigin)
 		dt.outputChan <- containerMsg
 	}

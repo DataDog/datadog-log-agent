@@ -66,6 +66,12 @@ func (suite *TailerTestSuite) TestTailerTails() {
 	suite.Equal("hello world", string(msg.Content()))
 	msg = <-suite.outputChan
 	suite.Equal("hello again", string(msg.Content()))
+
+	suite.Equal("file:tests/tailer/tailer.log", suite.tl.Identifier())
+}
+
+func (suite *TailerTestSuite) TestTailerIdentifier() {
+	suite.Equal("file:tests/tailer/tailer.log", suite.tl.Identifier())
 }
 
 func (suite *TailerTestSuite) TestTailerLifecycle() {
