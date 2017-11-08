@@ -6,6 +6,7 @@
 package tailer
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/DataDog/datadog-log-agent/pkg/auditor"
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/decoder"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
@@ -60,6 +62,17 @@ func NewTailer(outputChan chan message.Message, source *config.IntegrationConfig
 		stopMutex:     sync.Mutex{},
 		closeTimeout:  defaultCloseTimeout,
 	}
+}
+
+// Identifier returns a string that uniquely identifies a source
+func (t *Tailer) Identifier() string {
+	return fmt.Sprintf("file:%s", t.source.Path)
+}
+
+// recoverTailing starts the tailing from the last log line processed, or now
+// if we tail this file for the first time
+func (t *Tailer) recoverTailing(a *auditor.Auditor) error {
+	return t.tailFrom(a.GetLastCommitedOffset(t.Identifier()))
 }
 
 // Stop lets  the tailer stop
@@ -138,7 +151,7 @@ func (t *Tailer) forwardMessages() {
 
 		fileMsg := message.NewFileMessage(msg.Content())
 		msgOffset := msg.GetOrigin().Offset
-		identifier := t.source.Path
+		identifier := t.Identifier()
 		if !t.shouldTrackOffset {
 			msgOffset = 0
 			identifier = ""

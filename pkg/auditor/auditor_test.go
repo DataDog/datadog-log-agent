@@ -84,6 +84,7 @@ func (suite *AuditorTestSuite) TestAuditorRecoversRegistryForOffset() {
 	suite.a.registry[suite.source.Path] = &RegistryEntry{
 		Offset: 42,
 	}
+
 	offset, whence := suite.a.GetLastCommitedOffset(suite.source.Path)
 	suite.Equal(int64(42), offset)
 	suite.Equal(os.SEEK_CUR, whence)
@@ -143,10 +144,10 @@ func (suite *AuditorTestSuite) TestAuditorUnmarshalRegistryV0() {
 	}`
 	r, err := suite.a.unmarshalRegistry([]byte(input))
 	suite.Nil(err)
-	suite.Equal(r["path1.log"].Offset, int64(1))
-	suite.Equal(r["path1.log"].LastUpdated.Second(), 1)
-	suite.Equal(r["path2.log"].Offset, int64(2))
-	suite.Equal(r["path2.log"].LastUpdated.Second(), 2)
+	suite.Equal(r["file:path1.log"].Offset, int64(1))
+	suite.Equal(r["file:path1.log"].LastUpdated.Second(), 1)
+	suite.Equal(r["file:path2.log"].Offset, int64(2))
+	suite.Equal(r["file:path2.log"].LastUpdated.Second(), 2)
 }
 
 func (suite *AuditorTestSuite) TestAuditorUnmarshalRegistryV1() {

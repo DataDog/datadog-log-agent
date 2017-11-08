@@ -53,6 +53,11 @@ func (suite *DockerTailerTestSuite) TestDockerTailerRemovesDate() {
 	suite.Equal("2008-01-12T01:01:01.000000000Z", ts)
 }
 
+func (suite *DockerTailerTestSuite) TestDockerTailerIdentifier() {
+	suite.tailer.containerName = "test"
+	suite.Equal("docker:test", suite.tailer.Identifier())
+}
+
 func TestDockerTailerTestSuite(t *testing.T) {
 	suite.Run(t, new(DockerTailerTestSuite))
 }

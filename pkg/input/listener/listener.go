@@ -9,39 +9,36 @@ import (
 	"log"
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
-	"github.com/DataDog/datadog-log-agent/pkg/message"
+	"github.com/DataDog/datadog-log-agent/pkg/pipeline"
 )
 
 // A Listener summons different protocol specific listeners based on configuration
 type Listener struct {
-	processorChans [](chan message.Message)
-	sources        []*config.IntegrationConfigLogSource
+	pp      *pipeline.PipelineProvider
+	sources []*config.IntegrationConfigLogSource
 }
 
 // New returns an initialized Listener
-func New(sources []*config.IntegrationConfigLogSource, processorChans [](chan message.Message)) *Listener {
+func New(sources []*config.IntegrationConfigLogSource, pp *pipeline.PipelineProvider) *Listener {
 	return &Listener{
-		processorChans: processorChans,
-		sources:        sources,
+		pp:      pp,
+		sources: sources,
 	}
 }
 
 // Start starts the Listener
 func (l *Listener) Start() {
-	sourceId := 0
 	for _, source := range l.sources {
 		switch source.Type {
 		case config.TCP_TYPE:
-			tcpl, err := NewTcpListener(l.processorChans[sourceId], source)
-			sourceId = (sourceId + 1) % len(l.processorChans)
+			tcpl, err := NewTcpListener(l.pp, source)
 			if err != nil {
 				log.Println("Can't start tcp source:", err)
 			} else {
 				tcpl.Start()
 			}
 		case config.UDP_TYPE:
-			udpl, err := NewUdpListener(l.processorChans[sourceId], source)
-			sourceId = (sourceId + 1) % len(l.processorChans)
+			udpl, err := NewUdpListener(l.pp, source)
 			if err != nil {
 				log.Println("Can't start udp source:", err)
 			} else {

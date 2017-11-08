@@ -7,6 +7,7 @@ package auditor
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -241,7 +242,9 @@ func (a *Auditor) unmarshalRegistryV0(b []byte) (map[string]*RegistryEntry, erro
 		newEntry.Offset = entry.Offset
 		newEntry.LastUpdated = entry.Timestamp
 		newEntry.Timestamp = ""
-		registry[path] = &newEntry
+		// from v0 to v1, we also prefixed path with file:
+		newPath := fmt.Sprintf("file:%s", path)
+		registry[newPath] = &newEntry
 	}
 	return registry, nil
 }

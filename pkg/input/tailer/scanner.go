@@ -14,19 +14,20 @@ import (
 	"github.com/DataDog/datadog-log-agent/pkg/auditor"
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
+	"github.com/DataDog/datadog-log-agent/pkg/pipeline"
 )
 
 const scanPeriod = 10 * time.Second
 
 type Scanner struct {
-	sources     []*config.IntegrationConfigLogSource
-	outputChans [](chan message.Message)
-	tailers     map[string]*Tailer
-	auditor     *auditor.Auditor
+	sources []*config.IntegrationConfigLogSource
+	pp      *pipeline.PipelineProvider
+	tailers map[string]*Tailer
+	auditor *auditor.Auditor
 }
 
 // New returns an initialized Scanner
-func New(sources []*config.IntegrationConfigLogSource, outputChans [](chan message.Message), auditor *auditor.Auditor) *Scanner {
+func New(sources []*config.IntegrationConfigLogSource, pp *pipeline.PipelineProvider, auditor *auditor.Auditor) *Scanner {
 	tailSources := []*config.IntegrationConfigLogSource{}
 	for _, source := range sources {
 		switch source.Type {
@@ -36,20 +37,20 @@ func New(sources []*config.IntegrationConfigLogSource, outputChans [](chan messa
 		}
 	}
 	return &Scanner{
-		sources:     tailSources,
-		outputChans: outputChans,
-		tailers:     make(map[string]*Tailer),
-		auditor:     auditor,
+		sources: tailSources,
+		pp:      pp,
+		tailers: make(map[string]*Tailer),
+		auditor: auditor,
 	}
 }
 
 // setup sets all tailers
 func (s *Scanner) setup() {
-	for sourceId, source := range s.sources {
+	for _, source := range s.sources {
 		if _, ok := s.tailers[source.Path]; ok {
 			log.Println("Can't tail file twice:", source.Path)
 		} else {
-			s.setupTailer(source, false, s.outputChans[sourceId%len(s.outputChans)])
+			s.setupTailer(source, false, s.pp.NextPipelineChan())
 		}
 	}
 }
@@ -62,7 +63,7 @@ func (s *Scanner) setupTailer(source *config.IntegrationConfigLogSource, tailFro
 		err = t.tailFromBegining()
 	} else {
 		// resume tailing from last commited offset
-		err = t.tailFrom(s.auditor.GetLastCommitedOffset(t.source.Path))
+		err = t.recoverTailing(s.auditor)
 	}
 	if err != nil {
 		log.Println(err)
