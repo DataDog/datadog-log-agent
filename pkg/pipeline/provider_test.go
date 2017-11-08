@@ -26,14 +26,18 @@ func (suite *PipelineProviderTestSuite) TestPipelineProvider() {
 	suite.Equal(3, len(suite.pp.pipelinesChans))
 
 	c := suite.pp.NextPipelineChan()
-	suite.Equal(1, suite.pp.currentChanIdx)
+	suite.Equal(int32(1), suite.pp.currentChanIdx)
 	suite.pp.NextPipelineChan()
+	suite.Equal(int32(2), suite.pp.currentChanIdx)
 	suite.pp.NextPipelineChan()
 	suite.Equal(c, suite.pp.NextPipelineChan())
+}
 
+func (suite *PipelineProviderTestSuite) TestPipelineProviderMock() {
 	suite.pp.MockPipelineChans()
 	suite.Equal(1, len(suite.pp.pipelinesChans))
-	suite.Equal(1, suite.pp.numberOfPipelines)
+	suite.Equal(int32(1), suite.pp.numberOfPipelines)
+	suite.Equal(suite.pp.NextPipelineChan(), suite.pp.NextPipelineChan())
 }
 
 func TestPipelineProviderTestSuite(t *testing.T) {

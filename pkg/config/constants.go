@@ -10,5 +10,5 @@ const (
 	MaxMessageLen = 1 * 1000 * 1000
 
 	ChanSizes         = 100
-	NumberOfPipelines = 4
+	NumberOfPipelines = int32(4)
 )

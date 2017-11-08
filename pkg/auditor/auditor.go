@@ -7,11 +7,11 @@ package auditor
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -156,7 +156,7 @@ func (a *Auditor) GetLastCommitedOffset(identifier string) (int64, int) {
 	r := a.readOnlyRegistryCopy(a.registry)
 	entry, ok := r[identifier]
 	if !ok {
-		return a.GetLastCommitedOffsetV0(identifier)
+		return 0, os.SEEK_END
 	}
 	return entry.Offset, os.SEEK_CUR
 }
@@ -242,23 +242,9 @@ func (a *Auditor) unmarshalRegistryV0(b []byte) (map[string]*RegistryEntry, erro
 		newEntry.Offset = entry.Offset
 		newEntry.LastUpdated = entry.Timestamp
 		newEntry.Timestamp = ""
-		registry[path] = &newEntry
+		// from v0 to v1, we also prefixed path with file:
+		newPath := fmt.Sprintf("file:%s", path)
+		registry[newPath] = &newEntry
 	}
 	return registry, nil
-}
-
-func (a *Auditor) GetLastCommitedOffsetV0(identifier string) (int64, int) {
-	// V1 introduces "file:" prefix. Backwards compatibility means dropping
-	// this prefix on registry miss if indeed the identifier starts with "file:"
-	if !strings.HasPrefix(identifier, "file:") {
-		// should never happen
-		return 0, os.SEEK_END
-	}
-	identifier = identifier[5:]
-	r := a.readOnlyRegistryCopy(a.registry)
-	entry, ok := r[identifier]
-	if !ok {
-		return 0, os.SEEK_END
-	}
-	return entry.Offset, os.SEEK_CUR
 }

@@ -95,22 +95,6 @@ func (suite *AuditorTestSuite) TestAuditorRecoversRegistryForOffset() {
 	suite.Equal(os.SEEK_END, whence)
 }
 
-func (suite *AuditorTestSuite) TestAuditorRecoversRegistryForOffsetV0() {
-	suite.a.registry = make(map[string]*RegistryEntry)
-	suite.a.registry[suite.source.Path] = &RegistryEntry{
-		Offset: 42,
-	}
-
-	offset, whence := suite.a.GetLastCommitedOffset(fmt.Sprintf("file:%s", suite.source.Path))
-	suite.Equal(int64(42), offset)
-	suite.Equal(os.SEEK_CUR, whence)
-
-	othersource := &config.IntegrationConfigLogSource{Path: "anotherpath"}
-	offset, whence = suite.a.GetLastCommitedOffset(fmt.Sprintf("file:%s", othersource.Path))
-	suite.Equal(int64(0), offset)
-	suite.Equal(os.SEEK_END, whence)
-}
-
 func (suite *AuditorTestSuite) TestAuditorRecoversRegistryForTimestamp() {
 	ts := time.Date(2006, time.January, 12, 1, 1, 1, 1, time.UTC).Format("2006-01-02T15:04:05.000000")
 
@@ -160,10 +144,10 @@ func (suite *AuditorTestSuite) TestAuditorUnmarshalRegistryV0() {
 	}`
 	r, err := suite.a.unmarshalRegistry([]byte(input))
 	suite.Nil(err)
-	suite.Equal(r["path1.log"].Offset, int64(1))
-	suite.Equal(r["path1.log"].LastUpdated.Second(), 1)
-	suite.Equal(r["path2.log"].Offset, int64(2))
-	suite.Equal(r["path2.log"].LastUpdated.Second(), 2)
+	suite.Equal(r["file:path1.log"].Offset, int64(1))
+	suite.Equal(r["file:path1.log"].LastUpdated.Second(), 1)
+	suite.Equal(r["file:path2.log"].Offset, int64(2))
+	suite.Equal(r["file:path2.log"].LastUpdated.Second(), 2)
 }
 
 func (suite *AuditorTestSuite) TestAuditorUnmarshalRegistryV1() {

@@ -6,7 +6,7 @@
 package pipeline
 
 import (
-	"sync"
+	"sync/atomic"
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
@@ -15,12 +15,11 @@ import (
 )
 
 type PipelineProvider struct {
-	numberOfPipelines int
+	numberOfPipelines int32
 	chanSizes         int
 	pipelinesChans    [](chan message.Message)
 
-	currentChanIdx int
-	idxMux         sync.Mutex
+	currentChanIdx int32
 }
 
 // NewPipelineProvider returns a new PipelineProvider
@@ -36,7 +35,7 @@ func NewPipelineProvider() *PipelineProvider {
 // Start initializes the pipelines
 func (pp *PipelineProvider) Start(cm *sender.ConnectionManager, auditorChan chan message.Message) {
 
-	for i := 0; i < pp.numberOfPipelines; i++ {
+	for i := int32(0); i < pp.numberOfPipelines; i++ {
 
 		senderChan := make(chan message.Message, pp.chanSizes)
 		f := sender.New(senderChan, auditorChan, cm)
@@ -63,10 +62,6 @@ func (pp *PipelineProvider) MockPipelineChans() {
 
 // Start initializes the pipelines
 func (pp *PipelineProvider) NextPipelineChan() chan message.Message {
-	pp.idxMux.Lock()
-	defer pp.idxMux.Unlock()
-
-	nextChan := pp.pipelinesChans[pp.currentChanIdx%pp.numberOfPipelines]
-	pp.currentChanIdx += 1
-	return nextChan
+	idx := atomic.AddInt32(&pp.currentChanIdx, 1)
+	return pp.pipelinesChans[idx%pp.numberOfPipelines]
 }
