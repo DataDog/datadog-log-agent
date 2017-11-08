@@ -13,6 +13,7 @@ import (
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/decoder"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
+	"github.com/DataDog/datadog-log-agent/pkg/pipeline"
 )
 
 // A NetworkListener implements the methods run and readMessages,
@@ -25,9 +26,9 @@ type NetworkListener interface {
 // AbstractNetworkListener is an abstracted network listener.
 // It listens for bytes on a connection and forwards them to an output chan
 type AbstractNetworkListener struct {
-	listener   NetworkListener
-	outputChan chan message.Message
-	source     *config.IntegrationConfigLogSource
+	listener NetworkListener
+	pp       *pipeline.PipelineProvider
+	source   *config.IntegrationConfigLogSource
 }
 
 // Start starts the AbstractNetworkListener
@@ -36,7 +37,7 @@ func (anl *AbstractNetworkListener) Start() {
 }
 
 // forwardMessages lets the AbstractNetworkListener forward log messages to the output channel
-func (anl *AbstractNetworkListener) forwardMessages(d *decoder.Decoder) {
+func (anl *AbstractNetworkListener) forwardMessages(d *decoder.Decoder, outputChan chan message.Message) {
 	for msg := range d.OutputChan {
 
 		_, ok := msg.(*message.StopMessage)
@@ -44,17 +45,20 @@ func (anl *AbstractNetworkListener) forwardMessages(d *decoder.Decoder) {
 			return
 		}
 
-		netMsg := message.NewNetworkMessage(msg.Content(), anl.source)
-		anl.outputChan <- netMsg
+		netMsg := message.NewNetworkMessage(msg.Content())
+		o := message.NewOrigin()
+		o.LogSource = anl.source
+		netMsg.SetOrigin(o)
+		outputChan <- netMsg
 	}
 }
 
 // handleConnection listens to messages sent on a given connection
-// and forwards them to the outputChan
+// and forwards them to an outputChan
 func (anl *AbstractNetworkListener) handleConnection(conn net.Conn) {
 	d := decoder.InitializedDecoder()
 	d.Start()
-	go anl.forwardMessages(d)
+	go anl.forwardMessages(d, anl.pp.NextPipelineChan())
 	for {
 		inBuf := make([]byte, 4096)
 		n, err := anl.listener.readMessage(conn, inBuf)

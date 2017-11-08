@@ -19,8 +19,10 @@ type Message interface {
 
 // MessageOrigin represents the Origin of a message
 type MessageOrigin struct {
-	LogSource *config.IntegrationConfigLogSource
-	Offset    int64
+	Identifier string
+	LogSource  *config.IntegrationConfigLogSource
+	Offset     int64
+	Timestamp  string
 }
 
 type message struct {
@@ -55,26 +57,9 @@ func NewMessage(content []byte) *message {
 	}
 }
 
-// NewOrigin returns a new MessageOrigin
-func NewOriginFromOffset(offset int64) *MessageOrigin {
-	return &MessageOrigin{
-		Offset: offset,
-	}
-}
-
-// NewNetworkOrigin returns a new MessageOrigin with network only attributes
-func NewOriginFromLogSource(Origin *config.IntegrationConfigLogSource) *MessageOrigin {
-	return &MessageOrigin{
-		LogSource: Origin,
-	}
-}
-
-// NewFileOrigin returns a new MessageOrigin with file related attributes
-func NewOrigin(Origin *config.IntegrationConfigLogSource, offset int64) *MessageOrigin {
-	return &MessageOrigin{
-		LogSource: Origin,
-		Offset:    offset,
-	}
+// NewFileOrigin returns a new MessageOrigin
+func NewOrigin() *MessageOrigin {
+	return &MessageOrigin{}
 }
 
 // StopMessage is used to let a component stop gracefully
@@ -104,10 +89,19 @@ type NetworkMessage struct {
 	*message
 }
 
-func NewNetworkMessage(content []byte, source *config.IntegrationConfigLogSource) *NetworkMessage {
-	msg := &NetworkMessage{
+func NewNetworkMessage(content []byte) *NetworkMessage {
+	return &NetworkMessage{
 		message: NewMessage(content),
 	}
-	msg.SetOrigin(NewOriginFromLogSource(source))
-	return msg
+}
+
+// ContainerMessage is a message coming from a container Source
+type ContainerMessage struct {
+	*message
+}
+
+func NewContainerMessage(content []byte) *ContainerMessage {
+	return &ContainerMessage{
+		message: NewMessage(content),
+	}
 }

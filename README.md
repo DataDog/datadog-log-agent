@@ -21,3 +21,10 @@ Each log line comes from a source (e.g. file, network), and then enters one of t
 `Forwarder` submits the messages to the intake, and notifies the auditor
 
 `Auditor` notes that messages were properly submitted, stores offsets for agent restarts
+
+## How to run
+
+- `rake deps`
+- `rake build`
+- setup config files
+- `./build/logagent --ddconfig pkg/logagent/etc/datadog.yaml --ddconfd pkg/logagent/etc/conf.d/`

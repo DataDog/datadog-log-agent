@@ -15,9 +15,9 @@ import (
 
 func TestAvailableIntegrationConfigs(t *testing.T) {
 	ddconfdPath := filepath.Join(testsPath, "complete", "conf.d")
-	assert.Equal(t, []string{"integration", "integration2"}, availableIntegrationConfigs(ddconfdPath))
+	assert.Equal(t, []string{"integration", "integration2", "integration3"}, availableIntegrationConfigs(ddconfdPath))
 	ddconfdPath = filepath.Join(testsPath, "complete5", "conf.d")
-	assert.Equal(t, []string{"integration", "integration2"}, availableIntegrationConfigs(ddconfdPath))
+	assert.Equal(t, []string{"integration"}, availableIntegrationConfigs(ddconfdPath))
 }
 
 func TestBuildLogsAgentIntegrationsConfigs(t *testing.T) {
@@ -26,7 +26,7 @@ func TestBuildLogsAgentIntegrationsConfigs(t *testing.T) {
 	buildLogsAgentIntegrationsConfig(testConfig, ddconfdPath)
 
 	rules := getLogsSources(testConfig)
-	assert.Equal(t, 2, len(rules))
+	assert.Equal(t, 3, len(rules))
 	assert.Equal(t, "file", rules[0].Type)
 	assert.Equal(t, "/var/log/access.log", rules[0].Path)
 	assert.Equal(t, "nginx", rules[0].Service)
@@ -42,6 +42,9 @@ func TestBuildLogsAgentIntegrationsConfigs(t *testing.T) {
 	assert.Equal(t, "", rules[1].Service)
 	assert.Equal(t, "", rules[1].Source)
 	assert.Equal(t, 0, len(rules[1].Tags))
+
+	assert.Equal(t, "docker", rules[2].Type)
+	assert.Equal(t, "test", rules[2].Image)
 
 	// processing
 	assert.Equal(t, 0, len(rules[0].ProcessingRules))
