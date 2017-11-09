@@ -11,8 +11,6 @@ import (
 	"github.com/DataDog/datadog-log-agent/pkg/message"
 )
 
-const maxSubmissionAttempts = 5
-
 // A Sender sends messages from an inputChan to datadog's intake,
 // handling connections and retries
 type Sender struct {
@@ -45,26 +43,12 @@ func (s *Sender) run() {
 
 // wireMessage lets the Sender send a message to datadog's intake
 func (s *Sender) wireMessage(payload message.Message) {
-	retries := maxSubmissionAttempts
-
-	for retries > 0 {
-
+	for {
 		if s.conn == nil {
-			conn, err := s.connManager.NewConnection() // blocks until a new conn is ready
-			if err != nil {
-				reportNetError("out_connection.connection_failure", err)
-				return
-			}
-			s.conn = conn
+			s.conn = s.connManager.NewConnection() // blocks until a new conn is ready
 		}
 		_, err := s.conn.Write(payload.Content())
 		if err != nil {
-			if err.Error() != "tls: use of closed connection" {
-				// no need to report this error, it's expected
-				// for connection to be closed when unused
-				reportNetError("message.submit_error", err)
-			}
-			retries -= 1
 			s.connManager.CloseConnection(s.conn)
 			s.conn = nil
 			continue
