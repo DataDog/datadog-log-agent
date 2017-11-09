@@ -68,6 +68,11 @@ func buildMainConfig(config *viper.Viper, ddconfigPath, ddconfdPath string) erro
 		hostname = "unknown"
 	}
 	config.SetDefault("hostname", hostname)
+	if config.Get("hostname") == "" {
+			// logs get messed up if hostname is an empty string
+			// the agent 6 update script makes this a common problem
+			config.Set("hostname", hostname)
+	}
 
 	err = BuildLogsAgentIntegrationsConfigs(ddconfdPath)
 	if err != nil {
