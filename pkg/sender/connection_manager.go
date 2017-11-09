@@ -15,9 +15,11 @@ import (
 	"time"
 )
 
-const backoffSleepTimeUnit = 2 // in seconds
-const maxBackoffSleepTime = 30 // in seconds
-const timeout = 20 * time.Second
+const (
+	backoffSleepTimeUnit = 2  // in seconds
+	maxBackoffSleepTime  = 30 // in seconds
+	timeout              = 20 * time.Second
+)
 
 // A ConnectionManager manages connections
 type ConnectionManager struct {
