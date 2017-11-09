@@ -45,6 +45,15 @@ func (p *Processor) Start() {
 	go p.run()
 }
 
+// check the hostname for an emtpy string
+func checkHostname(hostname string) string {
+	if hostname == "" {
+		// return the global HOSTNAME value
+		return config.HOSTNAME
+	}
+	return hostname
+}
+
 // run starts the processing of the inputChan
 func (p *Processor) run() {
 	for msg := range p.inputChan {
@@ -70,7 +79,7 @@ func (p *Processor) computeExtraContent(msg message.Message) []byte {
 		extraContent := []byte("<46>0 ")
 		extraContent = append(extraContent, []byte(timestamp)...)
 		extraContent = append(extraContent, ' ')
-		extraContent = append(extraContent, []byte(config.LogsAgent.GetString("hostname"))...)
+		extraContent = append(extraContent, []byte(checkHostname(config.LogsAgent.GetString("hostname")))...)
 		extraContent = append(extraContent, ' ')
 		service := msg.GetOrigin().LogSource.Service
 		if service != "" {
