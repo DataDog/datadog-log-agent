@@ -82,7 +82,23 @@ func (dt *DockerTailer) tailFromEnd() error {
 // recoverTailing starts the tailing from the last log line processed, or now
 // if we see this container for the first time
 func (dt *DockerTailer) recoverTailing(a *auditor.Auditor) error {
-	return dt.tailFrom(a.GetLastCommitedTimestamp(dt.Identifier()))
+	return dt.tailFrom(dt.nextLogSinceDate(a.GetLastCommitedTimestamp(dt.Identifier())))
+}
+
+// nextLogSinceDate returns the `from` value of the next log line
+// for a container.
+// In the auditor, we store the date of the last log line processed.
+// `ContainerLogs` is not exclusive on `Since`, so if we start again
+// from this date, we collect that last log line twice on restart.
+// A workaround is to add one nano second, to exclude that last
+// log line
+func (dt *DockerTailer) nextLogSinceDate(lastTs string) string {
+	ts, err := time.Parse(DateLayout, lastTs)
+	if err != nil {
+		return lastTs
+	}
+	ts = ts.Add(time.Nanosecond)
+	return ts.Format(DateLayout)
 }
 
 // tailFrom starts the tailing from the specified time
