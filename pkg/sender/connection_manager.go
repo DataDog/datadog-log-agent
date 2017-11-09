@@ -15,8 +15,8 @@ import (
 	"time"
 )
 
-const maxConnectionAttempts = 5
-const backoffSleepTime = 2
+const backoffSleepTimeUnit = 2 // in seconds
+const maxBackoffSleepTime = 30 // in seconds
 const timeout = 20 * time.Second
 
 // A ConnectionManager manages connections
@@ -38,8 +38,7 @@ func NewConnectionManager(ddUrl string, ddPort int, skip_ssl_validation bool) *C
 		serverName:          ddUrl,
 		skip_ssl_validation: skip_ssl_validation,
 
-		mutex:   sync.Mutex{},
-		retries: maxConnectionAttempts,
+		mutex: sync.Mutex{},
 
 		firstConn: true,
 	}
@@ -47,20 +46,20 @@ func NewConnectionManager(ddUrl string, ddPort int, skip_ssl_validation bool) *C
 
 // NewConnection returns an initialized connection to the intake.
 // It blocks until a connection is available
-func (cm *ConnectionManager) NewConnection() (net.Conn, error) {
+func (cm *ConnectionManager) NewConnection() net.Conn {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
-	for cm.retries > 0 {
+	for {
 		if cm.firstConn {
 			log.Println("Connecting to the backend:", cm.connectionString, "- skip_ssl_validation:", cm.skip_ssl_validation)
 			cm.firstConn = false
 		}
 
-		cm.retries -= 1
+		cm.retries += 1
 		outConn, err := net.DialTimeout("tcp", cm.connectionString, timeout)
 		if err != nil {
-			reportNetError("out_connection.connection_error", err)
+			log.Println(err)
 			cm.backoff()
 			continue
 		}
@@ -72,20 +71,17 @@ func (cm *ConnectionManager) NewConnection() (net.Conn, error) {
 			sslConn := tls.Client(outConn, config)
 			err = sslConn.Handshake()
 			if err != nil {
-				reportNetError("out_connection.handshake_error", err)
+				log.Println(err)
 				cm.backoff()
 				continue
 			}
 			outConn = sslConn
 		}
 
-		cm.retries = maxConnectionAttempts
+		cm.retries = 0
 		go cm.handleServerClose(outConn)
-		return outConn, nil
+		return outConn
 	}
-
-	cm.retries = 1 // we know we're in a degraded state, we don't need to retry often
-	return nil, fmt.Errorf("Connection failed")
 }
 
 // CloseConnection closes a connection on the client side
@@ -103,20 +99,18 @@ func (cm *ConnectionManager) handleServerClose(conn net.Conn) {
 			cm.CloseConnection(conn)
 			return
 		} else if err != nil {
-			switch err.(type) {
-			case *net.OpError:
-				if err.(*net.OpError).Err.Error() == "use of closed network connection" {
-					log.Println("Client closed the connection")
-					return
-				}
-			}
-			panic(err) // fixme: close connection
+			log.Println(err)
+			return
 		}
 	}
 }
 
 // backoff lets the connection mananger sleep a bit
 func (cm *ConnectionManager) backoff() {
-	timer := time.NewTimer(time.Second * time.Duration((maxConnectionAttempts-cm.retries)*backoffSleepTime))
+	backoffDuration := backoffSleepTimeUnit * cm.retries
+	if backoffDuration > maxBackoffSleepTime {
+		backoffDuration = maxBackoffSleepTime
+	}
+	timer := time.NewTimer(time.Second * time.Duration(backoffDuration))
 	<-timer.C
 }
