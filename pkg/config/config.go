@@ -7,11 +7,11 @@ package config
 
 import (
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/viper"
+	"github.com/DataDog/datadog-agent/pkg/util"
 )
 
 // MainConfig is the name of the main config file, while we haven't merged in dd agent
@@ -62,13 +62,13 @@ func buildMainConfig(config *viper.Viper, ddconfigPath, ddconfdPath string) erro
 		config.SetDefault("log_enabled", false)
 	}
 
-	hostname, err := os.Hostname()
+	hostname, err := util.GetHostname()
 	if err != nil {
 		log.Println(err)
 		hostname = "unknown"
 	}
 	config.SetDefault("hostname", hostname)
-	if config.Get("hostname") == "" {
+	if config.GetString("hostname") == "" {
 			// logs get messed up if hostname is an empty string
 			// the agent 6 update script makes this a common problem
 			config.Set("hostname", hostname)

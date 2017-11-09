@@ -6,12 +6,12 @@
 package config
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/spf13/viper"
+	"github.com/spf13/viper"	
 	"github.com/stretchr/testify/assert"
+	"github.com/DataDog/datadog-agent/pkg/util"
 )
 
 const testsPath = "tests"
@@ -63,7 +63,7 @@ func TestBuildConfigWithEmptyStringHostname(t *testing.T) {
 	ddconfigPath := filepath.Join(testsPath, "emptystringhostname", "datadog.yaml")
 	ddconfdPath := filepath.Join(testsPath, "emptystringhostname", "conf.d")
 	buildMainConfig(testConfig, ddconfigPath, ddconfdPath)
-	hostname, err := os.Hostname()
+	hostname, err := util.GetHostname()
 	if err != nil {
 		hostname = "unknown"
 	}
