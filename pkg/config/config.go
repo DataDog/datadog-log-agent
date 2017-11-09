@@ -14,6 +14,9 @@ import (
 	"github.com/spf13/viper"
 )
 
+// HOSTNAME is a global to be used as a fallback
+var HOSTNAME string
+
 // MainConfig is the name of the main config file, while we haven't merged in dd agent
 const MainConfig = "datadog"
 const DeprecatedConfig = "logs-agent"
@@ -68,6 +71,9 @@ func buildMainConfig(config *viper.Viper, ddconfigPath, ddconfdPath string) erro
 		hostname = "unknown"
 	}
 	config.SetDefault("hostname", hostname)
+
+	// save the hostname to a global
+	HOSTNAME = hostname
 
 	err = BuildLogsAgentIntegrationsConfigs(ddconfdPath)
 	if err != nil {
