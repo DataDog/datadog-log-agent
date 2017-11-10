@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DataDog/datadog-agent/pkg/util"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -55,6 +56,8 @@ func TestBuildConfigWithIncompleteFile(t *testing.T) {
 	assert.Equal(t, 10516, testConfig.GetInt("log_dd_port"))
 	assert.Equal(t, false, testConfig.GetBool("skip_ssl_validation"))
 	assert.Equal(t, false, testConfig.GetBool("log_enabled"))
+	hostname, _ := util.GetHostname()
+	assert.Equal(t, hostname, testConfig.GetString("hostname"))
 }
 
 func TestComputeConfigWithMisconfiguredFile(t *testing.T) {
