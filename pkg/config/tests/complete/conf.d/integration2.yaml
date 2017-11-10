@@ -11,4 +11,7 @@ logs:
       - type: mask_sequences
         name: mocked_mask_rule
         replace_placeholder: "[mocked]"
-        pattern: ".*" 
+        pattern: ".*"
+      - type: multi_line
+        name: numbers
+        pattern: "^[0-9]"

@@ -83,15 +83,15 @@ func (suite *ScannerTestSuite) TestScannerScanWithoutLogRotation() {
 	var newTailer *Tailer
 	var err error
 	var msg message.Message
-	var lastOffset int64
+	var readOffset int64
 
 	tailer = s.tailers[sources[0].Path]
 	_, err = suite.testFile.WriteString("hello world\n")
 	suite.Nil(err)
 	msg = <-suite.outputChan
 	suite.Equal("hello world", string(msg.Content()))
-	lastOffset = tailer.GetLastOffset()
-	suite.True(lastOffset > 0)
+	readOffset = tailer.GetReadOffset()
+	suite.True(readOffset > 0)
 
 	s.scan()
 	newTailer = s.tailers[sources[0].Path]
@@ -101,7 +101,7 @@ func (suite *ScannerTestSuite) TestScannerScanWithoutLogRotation() {
 	suite.Nil(err)
 	msg = <-suite.outputChan
 	suite.Equal("hello again", string(msg.Content()))
-	suite.True(tailer.GetLastOffset() > lastOffset)
+	suite.True(tailer.GetReadOffset() > readOffset)
 }
 
 func (suite *ScannerTestSuite) TestScannerScanWithLogRotation() {
@@ -155,8 +155,8 @@ func (suite *ScannerTestSuite) TestScannerScanWithLogRotationCopyTruncate() {
 	suite.Nil(err)
 	s.scan()
 	newTailer = s.tailers[sources[0].Path]
-	suite.Equal(tailer, newTailer)
-	suite.Equal(tailer.GetLastOffset(), int64(0))
+	suite.NotEqual(tailer, newTailer)
+	suite.Equal(newTailer.GetReadOffset(), int64(0))
 
 	msg = <-suite.outputChan
 	suite.Equal("third", string(msg.Content()))

@@ -15,9 +15,7 @@ const (
 // Business constants
 
 const (
-	// MaxMessageLen is the maximum length for any message we send to the intake
-	MaxMessageLen = 1 * 1000 * 1000
-	DateFormat    = "2006-01-02T15:04:05.000000000Z"
+	DateFormat = "2006-01-02T15:04:05.000000000Z"
 )
 
 var (

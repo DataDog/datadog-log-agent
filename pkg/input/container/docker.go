@@ -57,7 +57,7 @@ func NewDockerTailer(cli *client.Client, container types.Container, source *conf
 	return &DockerTailer{
 		containerId: container.ID,
 		outputChan:  outputChan,
-		d:           decoder.InitializedDecoder(),
+		d:           decoder.InitializeDecoder(source),
 		source:      source,
 		cli:         cli,
 
@@ -165,7 +165,7 @@ func (dt *DockerTailer) readForever() {
 			dt.wait()
 			continue
 		}
-		dt.d.InputChan <- decoder.NewPayload(inBuf[:n], 0)
+		dt.d.InputChan <- decoder.NewInput(inBuf[:n])
 	}
 }
 
@@ -176,13 +176,12 @@ func (dt *DockerTailer) readForever() {
 // As a result, we need to remove this timestamp from the log
 // message before forwarding it
 func (dt *DockerTailer) forwardMessages() {
-	for msg := range dt.d.OutputChan {
-		_, ok := msg.(*message.StopMessage)
-		if ok {
+	for output := range dt.d.OutputChan {
+		if output.ShouldStop {
 			return
 		}
 
-		ts, sev, updatedMsg, err := dt.parseMessage(msg.Content())
+		ts, sev, updatedMsg, err := dt.parseMessage(output.Content)
 		if err != nil {
 			log.Println(err)
 			continue

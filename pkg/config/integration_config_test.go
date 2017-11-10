@@ -46,13 +46,21 @@ func TestBuildLogsAgentIntegrationsConfigs(t *testing.T) {
 
 	// processing
 	assert.Equal(t, 0, len(rules[0].ProcessingRules))
-	assert.Equal(t, 1, len(rules[1].ProcessingRules))
+	assert.Equal(t, 2, len(rules[1].ProcessingRules))
+
 	pRule := rules[1].ProcessingRules[0]
 	assert.Equal(t, "mask_sequences", pRule.Type)
 	assert.Equal(t, "mocked_mask_rule", pRule.Name)
 	assert.Equal(t, "[mocked]", pRule.ReplacePlaceholder)
 	assert.Equal(t, []byte("[mocked]"), pRule.ReplacePlaceholderBytes)
 	assert.Equal(t, ".*", pRule.Pattern)
+
+	mRule := rules[1].ProcessingRules[1]
+	assert.Equal(t, "multi_line", mRule.Type)
+	assert.Equal(t, "numbers", mRule.Name)
+	re := mRule.Reg
+	assert.True(t, re.MatchString("123"))
+	assert.False(t, re.MatchString("a123"))
 }
 
 func TestBuildTagsPayload(t *testing.T) {
