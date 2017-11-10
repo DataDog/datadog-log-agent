@@ -9,8 +9,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/spf13/viper"
+	"github.com/spf13/viper"	
 	"github.com/stretchr/testify/assert"
+	"github.com/DataDog/datadog-agent/pkg/util"
 )
 
 const testsPath = "tests"
@@ -55,6 +56,18 @@ func TestBuildConfigWithIncompleteFile(t *testing.T) {
 	assert.Equal(t, 10516, testConfig.GetInt("log_dd_port"))
 	assert.Equal(t, false, testConfig.GetBool("skip_ssl_validation"))
 	assert.Equal(t, false, testConfig.GetBool("log_enabled"))
+}
+
+func TestBuildConfigWithEmptyStringHostname(t *testing.T) {
+	var testConfig = viper.New()
+	ddconfigPath := filepath.Join(testsPath, "emptystringhostname", "datadog.yaml")
+	ddconfdPath := filepath.Join(testsPath, "emptystringhostname", "conf.d")
+	buildMainConfig(testConfig, ddconfigPath, ddconfdPath)
+	hostname, err := util.GetHostname()
+	if err != nil {
+		hostname = "unknown"
+	}
+	assert.Equal(t, hostname, testConfig.GetString("hostname"))
 }
 
 func TestComputeConfigWithMisconfiguredFile(t *testing.T) {

@@ -6,12 +6,13 @@
 package config
 
 import (
-	"log"
 	"os"
+	"log"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/viper"
+	"github.com/DataDog/datadog-agent/pkg/util"
 )
 
 // MainConfig is the name of the main config file, while we haven't merged in dd agent
@@ -55,19 +56,26 @@ func buildMainConfig(config *viper.Viper, ddconfigPath, ddconfdPath string) erro
 	config.SetDefault("skip_ssl_validation", false)
 	config.SetDefault("run_path", "/opt/datadog-agent/run")
 
+	hostname, err := os.Hostname()
 	if isAgent5 {
 		// for agent5, we don't want people to have to set log_enabled in the config
 		config.SetDefault("log_enabled", true)
 	} else {
 		config.SetDefault("log_enabled", false)
+		// agent6 has a util.GetHostname() that agent5 does not have
+		hostname, err = util.GetHostname()
 	}
 
-	hostname, err := os.Hostname()
 	if err != nil {
 		log.Println(err)
 		hostname = "unknown"
 	}
 	config.SetDefault("hostname", hostname)
+	if config.GetString("hostname") == "" {
+			// logs get messed up if hostname is an empty string
+			// the agent 6 update script makes this a common problem
+			config.Set("hostname", hostname)
+	}
 
 	err = BuildLogsAgentIntegrationsConfigs(ddconfdPath)
 	if err != nil {
