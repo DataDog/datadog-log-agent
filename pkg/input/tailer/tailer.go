@@ -50,7 +50,7 @@ func NewTailer(outputChan chan message.Message, source *config.IntegrationConfig
 	return &Tailer{
 		path:       source.Path,
 		outputChan: outputChan,
-		d:          decoder.InitializedDecoder(source),
+		d:          decoder.InitializeDecoder(source),
 		source:     source,
 
 		lastOffset:        0,

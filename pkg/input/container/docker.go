@@ -48,7 +48,7 @@ func NewDockerTailer(cli *client.Client, container types.Container, source *conf
 	return &DockerTailer{
 		containerName: container.ID,
 		outputChan:    outputChan,
-		d:             decoder.InitializedDecoder(),
+		d:             decoder.InitializeDecoder(source),
 		source:        source,
 		cli:           cli,
 
