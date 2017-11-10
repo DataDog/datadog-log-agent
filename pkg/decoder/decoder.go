@@ -7,6 +7,7 @@ package decoder
 
 import (
 	"bytes"
+	"regexp"
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
@@ -28,22 +29,36 @@ type Decoder struct {
 	InputChan  chan *Payload
 	OutputChan chan message.Message
 	msgBuffer  *bytes.Buffer
+	re         *regexp.Regexp
+	singleline bool
 }
 
 // InitializeDecoder returns a properly initialized Decoder
-func InitializedDecoder() *Decoder {
+func InitializedDecoder(source *config.IntegrationConfigLogSource) *Decoder {
+	var singleline bool = true
+	var re *regexp.Regexp
+	for _, rule := range source.ProcessingRules {
+		switch rule.Type {
+		case config.MULTILINE:
+			singleline = false
+			re = rule.Reg
+		}
+	}
+
 	inputChan := make(chan *Payload)
 	outputChan := make(chan message.Message)
-	return New(inputChan, outputChan)
+	return New(inputChan, outputChan, re, singleline)
 }
 
 // New returns an initialized Decoder
-func New(InputChan chan *Payload, OutputChan chan message.Message) *Decoder {
+func New(InputChan chan *Payload, OutputChan chan message.Message, re *regexp.Regexp, singleline bool) *Decoder {
 	var msgBuf bytes.Buffer
 	return &Decoder{
 		InputChan:  InputChan,
 		OutputChan: OutputChan,
 		msgBuffer:  &msgBuf,
+		re:         re,
+		singleline: singleline,
 	}
 }
 

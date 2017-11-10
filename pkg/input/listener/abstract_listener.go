@@ -56,7 +56,7 @@ func (anl *AbstractNetworkListener) forwardMessages(d *decoder.Decoder, outputCh
 // handleConnection listens to messages sent on a given connection
 // and forwards them to an outputChan
 func (anl *AbstractNetworkListener) handleConnection(conn net.Conn) {
-	d := decoder.InitializedDecoder()
+	d := decoder.InitializedDecoder(anl.source)
 	d.Start()
 	go anl.forwardMessages(d, anl.pp.NextPipelineChan())
 	for {
