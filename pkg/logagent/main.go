@@ -12,6 +12,7 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
+	"github.com/DataDog/datadog-log-agent/pkg/utils"
 )
 
 var ddconfigPath = flag.String("ddconfig", "", "Path to the datadog.yaml configuration file")
@@ -20,6 +21,8 @@ var ddconfdPath = flag.String("ddconfd", "", "Path to the conf.d directory that 
 // main starts the logs agent
 func main() {
 	flag.Parse()
+
+	utils.SetupLogger()
 
 	err := config.BuildLogsAgentConfig(*ddconfigPath, *ddconfdPath)
 	if err != nil {
