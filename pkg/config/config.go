@@ -6,6 +6,7 @@
 package config
 
 import (
+	"os"
 	"log"
 	"path/filepath"
 	"strings"
@@ -55,14 +56,16 @@ func buildMainConfig(config *viper.Viper, ddconfigPath, ddconfdPath string) erro
 	config.SetDefault("skip_ssl_validation", false)
 	config.SetDefault("run_path", "/opt/datadog-agent/run")
 
+	hostname, err := os.Hostname()
 	if isAgent5 {
 		// for agent5, we don't want people to have to set log_enabled in the config
 		config.SetDefault("log_enabled", true)
 	} else {
 		config.SetDefault("log_enabled", false)
+		// agent6 has a util.GetHostname() that agent5 does not have
+		hostname, err = util.GetHostname()
 	}
 
-	hostname, err := util.GetHostname()
 	if err != nil {
 		log.Println(err)
 		hostname = "unknown"
