@@ -7,10 +7,10 @@ package config
 
 import (
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/DataDog/datadog-agent/pkg/util"
 	"github.com/spf13/viper"
 )
 
@@ -62,12 +62,16 @@ func buildMainConfig(config *viper.Viper, ddconfigPath, ddconfdPath string) erro
 		config.SetDefault("log_enabled", false)
 	}
 
-	hostname, err := os.Hostname()
-	if err != nil {
-		log.Println(err)
-		hostname = "unknown"
+	// For hostname, use value from config if set and non empty,
+	// or fallback on agent6's logic
+	if config.GetString("hostname") == "" {
+		hostname, err := util.GetHostname()
+		if err != nil {
+			log.Println(err)
+			hostname = "unknown"
+		}
+		config.Set("hostname", hostname)
 	}
-	config.SetDefault("hostname", hostname)
 
 	err = BuildLogsAgentIntegrationsConfigs(ddconfdPath)
 	if err != nil {
