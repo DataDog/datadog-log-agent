@@ -15,6 +15,11 @@ type Message interface {
 	SetContent([]byte)
 	GetOrigin() *MessageOrigin
 	SetOrigin(*MessageOrigin)
+	GetTimestamp() string // No need for SetTimestamp as we use MessageOrigin under the hood
+	GetSeverity() []byte
+	SetSeverity([]byte)
+	GetTagsPayload() []byte
+	SetTagsPayload([]byte)
 }
 
 // MessageOrigin represents the Origin of a message
@@ -26,8 +31,10 @@ type MessageOrigin struct {
 }
 
 type message struct {
-	content []byte
-	Origin  *MessageOrigin
+	content     []byte
+	Origin      *MessageOrigin
+	severity    []byte
+	tagsPayload []byte
 }
 
 // Content returns the content the message, the actual log line
@@ -48,6 +55,42 @@ func (m *message) GetOrigin() *MessageOrigin {
 // SetOrigin sets the integration from which the message comes
 func (m *message) SetOrigin(Origin *MessageOrigin) {
 	m.Origin = Origin
+}
+
+// GetTimestamp returns the timestamp of the message, or "" if no timestamp is relevant
+func (m *message) GetTimestamp() string {
+	if m.Origin != nil {
+		return m.Origin.Timestamp
+	}
+	return ""
+}
+
+// GetSeverity returns the severity of the message when set
+func (m *message) GetSeverity() []byte {
+	return m.severity
+}
+
+// SetSeverity sets the severity of the message
+func (m *message) SetSeverity(severity []byte) {
+	m.severity = severity
+}
+
+// GetSeverity returns the tags and sources of the message
+// It will default on the LogSource tags payload, but can
+// be overriden in the message itself with tagsPayload
+func (m *message) GetTagsPayload() []byte {
+	if m.tagsPayload != nil {
+		return m.tagsPayload
+	}
+	if m.Origin != nil && m.Origin.LogSource != nil {
+		return m.Origin.LogSource.TagsPayload
+	}
+	return nil
+}
+
+// SetSeverity sets the tags and sources of the message
+func (m *message) SetTagsPayload(tagsPayload []byte) {
+	m.tagsPayload = tagsPayload
 }
 
 // NewMessage returns a new message

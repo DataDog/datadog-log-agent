@@ -99,19 +99,34 @@ func TestComputeExtraContent(t *testing.T) {
 	p := NewTestProcessor()
 	var extraContent []byte
 	var extraContentParts []string
-
 	source := &config.IntegrationConfigLogSource{TagsPayload: []byte{'-'}}
+
+	// message with Content only, check default values
+
 	extraContent = p.computeExtraContent(newNetworkMessage([]byte("message"), source))
 	extraContentParts = strings.Split(string(extraContent), " ")
 	assert.Equal(t, 8, len(extraContentParts))
-	// Pick the date string from the extra content parts and make sure it's within 1mn of the UTC time
-	const format = "2006-01-02T15:04:05"
+
+	assert.Equal(t, "<46>0", extraContentParts[0])
+	format := "2006-01-02T15:04:05"
 	timestamp, err := time.Parse(format, extraContentParts[1][:len(format)])
 	assert.Nil(t, err)
 	assert.True(t, math.Abs(time.Now().UTC().Sub(timestamp).Minutes()) < 1)
 
 	extraContent = p.computeExtraContent(newNetworkMessage([]byte("<message"), source))
 	assert.Nil(t, extraContent)
+
+	// message with additional information
+	msg := newNetworkMessage([]byte("message"), source)
+	msg.GetOrigin().Timestamp = "ts"
+	msg.SetSeverity([]byte("sev"))
+	msg.SetTagsPayload([]byte("tags"))
+
+	extraContent = p.computeExtraContent(msg)
+	extraContentParts = strings.Split(string(extraContent), " ")
+	assert.Equal(t, "sev0", extraContentParts[0])
+	assert.Equal(t, "ts", extraContentParts[1])
+	assert.Equal(t, "tags", extraContentParts[6])
 }
 
 func TestComputeApiKeyString(t *testing.T) {

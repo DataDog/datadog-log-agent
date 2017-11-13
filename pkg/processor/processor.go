@@ -63,24 +63,52 @@ func (p *Processor) run() {
 // For instance, we want to add the timestamp, hostname and a log level
 // to messages coming from a file
 func (p *Processor) computeExtraContent(msg message.Message) []byte {
+	// if the first char is '<', we can assume it's already formatted as RFC5424, thus skip this step
+	// (for instance, using tcp forwarding. We don't want to override the hostname & co)
 	if len(msg.Content()) > 0 && msg.Content()[0] != '<' {
 		// fit RFC5424
 		// <%pri%>%protocol-version% %timestamp:::date-rfc3339% %HOSTNAME% %$!new-appname% - - - %msg%\n
-		timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000000+00:00")
-		extraContent := []byte("<46>0 ")
-		extraContent = append(extraContent, []byte(timestamp)...)
+		extraContent := []byte("")
+
+		// Severity
+		if msg.GetSeverity() != nil {
+			extraContent = append(extraContent, msg.GetSeverity()...)
+		} else {
+			extraContent = append(extraContent, config.SEV_INFO...)
+		}
+
+		// Protocol version
+		extraContent = append(extraContent, '0')
 		extraContent = append(extraContent, ' ')
+
+		// Timestamp
+		if msg.GetTimestamp() != "" {
+			extraContent = append(extraContent, []byte(msg.GetTimestamp())...)
+		} else {
+			timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000000+00:00")
+			extraContent = append(extraContent, []byte(timestamp)...)
+		}
+		extraContent = append(extraContent, ' ')
+
+		// Hostname
 		extraContent = append(extraContent, []byte(config.LogsAgent.GetString("hostname"))...)
 		extraContent = append(extraContent, ' ')
+
+		// Service
 		service := msg.GetOrigin().LogSource.Service
 		if service != "" {
 			extraContent = append(extraContent, []byte(service)...)
 		} else {
 			extraContent = append(extraContent, '-')
 		}
+
+		// Extra
 		extraContent = append(extraContent, []byte(" - - ")...)
-		extraContent = append(extraContent, msg.GetOrigin().LogSource.TagsPayload...)
+
+		// Tags
+		extraContent = append(extraContent, msg.GetTagsPayload()...)
 		extraContent = append(extraContent, ' ')
+
 		return extraContent
 	}
 	return nil

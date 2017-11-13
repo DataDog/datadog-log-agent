@@ -5,10 +5,21 @@
 
 package config
 
+// Technical constants
+
+const (
+	ChanSizes         = 100
+	NumberOfPipelines = int32(4)
+)
+
+// Business constants
+
 const (
 	// MaxMessageLen is the maximum length for any message we send to the intake
 	MaxMessageLen = 1 * 1000 * 1000
+)
 
-	ChanSizes         = 100
-	NumberOfPipelines = int32(4)
+var (
+	SEV_INFO  = []byte("<46>")
+	SEV_ERROR = []byte("<43>")
 )
