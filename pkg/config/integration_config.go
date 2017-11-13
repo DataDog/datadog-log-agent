@@ -107,7 +107,7 @@ func buildLogsAgentIntegrationsConfig(config *viper.Viper, ddconfdPath string) e
 			}
 			logSourceConfig.ProcessingRules = rules
 
-			logSourceConfig.TagsPayload = buildTagsPayload(logSourceConfig.Tags, logSourceConfig.Source, logSourceConfig.SourceCategory)
+			logSourceConfig.TagsPayload = BuildTagsPayload(logSourceConfig.Tags, logSourceConfig.Source, logSourceConfig.SourceCategory)
 
 			logsSourceConfigs = append(logsSourceConfigs, &logSourceConfig)
 		}
@@ -180,9 +180,9 @@ func validateProcessingRules(rules []LogsProcessingRule) ([]LogsProcessingRule, 
 	return rules, nil
 }
 
-// Given a list of tags, buildTagsPayload generates the bytes array that will be inserted
+// Given a list of tags, BuildTagsPayload generates the bytes array that will be inserted
 // into messages
-func buildTagsPayload(configTags, source, sourceCategory string) []byte {
+func BuildTagsPayload(configTags, source, sourceCategory string) []byte {
 
 	tagsPayload := []byte{}
 	if source != "" {

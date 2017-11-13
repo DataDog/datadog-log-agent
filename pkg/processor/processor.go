@@ -85,7 +85,7 @@ func (p *Processor) computeExtraContent(msg message.Message) []byte {
 		if msg.GetTimestamp() != "" {
 			extraContent = append(extraContent, []byte(msg.GetTimestamp())...)
 		} else {
-			timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000000+00:00")
+			timestamp := time.Now().UTC().Format(config.DateFormat)
 			extraContent = append(extraContent, []byte(timestamp)...)
 		}
 		extraContent = append(extraContent, ' ')

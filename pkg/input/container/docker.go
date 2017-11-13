@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"reflect"
 	"strings"
 	"time"
 
@@ -26,7 +27,6 @@ import (
 )
 
 const defaultSleepDuration = 1 * time.Second
-const DateLayout = "2006-01-02T15:04:05.000000000Z"
 
 // DockerTailer tails logs coming from stdout and stderr of a docker container
 // With docker api, there is no way to know if a log comes from strout or stderr
@@ -35,9 +35,11 @@ type DockerTailer struct {
 	containerName string
 	outputChan    chan message.Message
 	d             *decoder.Decoder
-	source        *config.IntegrationConfigLogSource
 	reader        io.ReadCloser
 	cli           *client.Client
+	source        *config.IntegrationConfigLogSource
+	containerTags []string
+	tagsPayload   []byte
 
 	sleepDuration time.Duration
 	shouldStop    bool
@@ -45,6 +47,7 @@ type DockerTailer struct {
 
 // NewDockerTailer returns a new DockerTailer
 func NewDockerTailer(cli *client.Client, container types.Container, source *config.IntegrationConfigLogSource, outputChan chan message.Message) *DockerTailer {
+
 	return &DockerTailer{
 		containerName: container.ID,
 		outputChan:    outputChan,
@@ -70,13 +73,13 @@ func (dt *DockerTailer) Stop() {
 // tailFromBegining starts the tailing from the beginning
 // of the container logs
 func (dt *DockerTailer) tailFromBegining() error {
-	return dt.tailFrom(time.Time{}.Format(DateLayout))
+	return dt.tailFrom(time.Time{}.Format(config.DateFormat))
 }
 
 // tailFromEnd starts the tailing from the last line
 // of the container logs
 func (dt *DockerTailer) tailFromEnd() error {
-	return dt.tailFrom(time.Now().UTC().Format(DateLayout))
+	return dt.tailFrom(time.Now().UTC().Format(config.DateFormat))
 }
 
 // recoverTailing starts the tailing from the last log line processed, or now
@@ -93,12 +96,12 @@ func (dt *DockerTailer) recoverTailing(a *auditor.Auditor) error {
 // A workaround is to add one nano second, to exclude that last
 // log line
 func (dt *DockerTailer) nextLogSinceDate(lastTs string) string {
-	ts, err := time.Parse(DateLayout, lastTs)
+	ts, err := time.Parse(config.DateFormat, lastTs)
 	if err != nil {
 		return lastTs
 	}
 	ts = ts.Add(time.Nanosecond)
-	return ts.Format(DateLayout)
+	return ts.Format(config.DateFormat)
 }
 
 // tailFrom starts the tailing from the specified time
@@ -170,42 +173,45 @@ func (dt *DockerTailer) forwardMessages() {
 			return
 		}
 
-		ts, updatedMsg := dt.updatedDockerMessage(msg.Content())
+		ts, sev, updatedMsg := dt.parseMessage(msg.Content())
+		dt.checkForNewDockerTags()
 
 		containerMsg := message.NewContainerMessage(updatedMsg)
 		msgOrigin := message.NewOrigin()
 		msgOrigin.LogSource = dt.source
 		msgOrigin.Timestamp = ts
 		msgOrigin.Identifier = dt.Identifier()
+		containerMsg.SetSeverity(sev)
+		containerMsg.SetTagsPayload(dt.tagsPayload)
 		containerMsg.SetOrigin(msgOrigin)
 		dt.outputChan <- containerMsg
 	}
 }
 
-func (dt *DockerTailer) updatedDockerMessage(msg []byte) (string, []byte) {
+func (dt *DockerTailer) checkForNewDockerTags() {
 	tags, err := tagger.Tag(dockerutil.ContainerIDToEntityName(dt.containerName), false)
 	if err != nil {
 		log.Println(err)
+	} else {
+		if !reflect.DeepEqual(tags, dt.containerTags) {
+			dt.containerTags = tags
+			dt.tagsPayload = dt.buildTagsPayload()
+		}
 	}
-	ts, sev, parsedMsg := dt.parseMessage(msg)
+}
 
-	updatedMsg := fmt.Sprintf(
-		"{\"message\": %q, \"timestamp\": %q, \"ddtags\": %q, \"severity\": %q}",
-		parsedMsg,
-		ts,
-		strings.Join(tags, ","),
-		sev,
-	)
-	return ts, []byte(updatedMsg)
+func (dt *DockerTailer) buildTagsPayload() []byte {
+	tagsString := fmt.Sprintf("%s,%s", strings.Join(dt.containerTags, ","), dt.source.Tags)
+	return config.BuildTagsPayload(tagsString, dt.source.Source, dt.source.SourceCategory)
 }
 
 // parseMessage extracts the date and the severity from the raw docker message
 // see https://godoc.org/github.com/moby/moby/client#Client.ContainerLogs
-func (dt *DockerTailer) parseMessage(msg []byte) (string, string, []byte) {
+func (dt *DockerTailer) parseMessage(msg []byte) (string, []byte, []byte) {
 	// First byte is 1 for stdout and 2 for stderr
-	sev := "info"
+	sev := config.SEV_INFO
 	if msg[0] == 2 {
-		sev = "error"
+		sev = config.SEV_ERROR
 	}
 
 	// timestamp goes from byte 8 till first space
@@ -213,7 +219,7 @@ func (dt *DockerTailer) parseMessage(msg []byte) (string, string, []byte) {
 	to := bytes.Index(msg[from:], []byte{' '})
 	if to == -1 {
 		log.Println("invalid docker payload collected, skipping message")
-		return "", "", msg
+		return "", sev, msg
 	}
 	to += from
 	ts := string(msg[from:to])
