@@ -6,7 +6,6 @@
 package container
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -29,7 +28,6 @@ func (suite *DockerTailerTestSuite) TestDockerTailerRemovesDate() {
 	msgMeta[5] = '>'
 	msgMeta[6] = '1'
 	msgMeta[7] = 'g'
-	fmt.Println(msgMeta)
 
 	msg := []byte{}
 	for i := 0; i < len(msgMeta); i++ {
@@ -51,6 +49,12 @@ func (suite *DockerTailerTestSuite) TestDockerTailerRemovesDate() {
 	suite.Equal("my error", string(msg))
 	suite.Equal("error", sev)
 	suite.Equal("2008-01-12T01:01:01.000000000Z", ts)
+}
+
+func (suite *DockerTailerTestSuite) TestDockerTailerNextLogSinceDate() {
+	suite.Equal("2008-01-12T01:01:01.000000001Z", suite.tailer.nextLogSinceDate("2008-01-12T01:01:01.000000000Z"))
+	suite.Equal("2008-01-12T01:01:01.anything", suite.tailer.nextLogSinceDate("2008-01-12T01:01:01.anything"))
+	suite.Equal("", suite.tailer.nextLogSinceDate(""))
 }
 
 func (suite *DockerTailerTestSuite) TestDockerTailerIdentifier() {
