@@ -27,6 +27,7 @@ import (
 )
 
 const defaultSleepDuration = 1 * time.Second
+const tagsUpdatePeriod = 10 * time.Second
 
 // DockerTailer tails logs coming from stdout and stderr of a docker container
 // With docker api, there is no way to know if a log comes from strout or stderr
@@ -47,7 +48,6 @@ type DockerTailer struct {
 
 // NewDockerTailer returns a new DockerTailer
 func NewDockerTailer(cli *client.Client, container types.Container, source *config.IntegrationConfigLogSource, outputChan chan message.Message) *DockerTailer {
-
 	return &DockerTailer{
 		containerName: container.ID,
 		outputChan:    outputChan,
@@ -106,6 +106,7 @@ func (dt *DockerTailer) nextLogSinceDate(lastTs string) string {
 
 // tailFrom starts the tailing from the specified time
 func (dt *DockerTailer) tailFrom(from string) error {
+	go dt.keepDockerTagsUpdated()
 	dt.d.Start()
 	go dt.forwardMessages()
 	return dt.startReading(from)
@@ -174,7 +175,6 @@ func (dt *DockerTailer) forwardMessages() {
 		}
 
 		ts, sev, updatedMsg := dt.parseMessage(msg.Content())
-		dt.checkForNewDockerTags()
 
 		containerMsg := message.NewContainerMessage(updatedMsg)
 		msgOrigin := message.NewOrigin()
@@ -185,6 +185,17 @@ func (dt *DockerTailer) forwardMessages() {
 		containerMsg.SetTagsPayload(dt.tagsPayload)
 		containerMsg.SetOrigin(msgOrigin)
 		dt.outputChan <- containerMsg
+	}
+}
+
+func (dt *DockerTailer) keepDockerTagsUpdated() {
+	dt.checkForNewDockerTags()
+	ticker := time.NewTicker(tagsUpdatePeriod)
+	for _ = range ticker.C {
+		if dt.shouldStop {
+			return
+		}
+		dt.checkForNewDockerTags()
 	}
 }
 
