@@ -200,7 +200,7 @@ func (dt *DockerTailer) keepDockerTagsUpdated() {
 }
 
 func (dt *DockerTailer) checkForNewDockerTags() {
-	tags, err := tagger.Tag(dockerutil.ContainerIDToEntityName(dt.containerName), false)
+	tags, err := tagger.Tag(dockerutil.ContainerIDToEntityName(dt.containerName), true)
 	if err != nil {
 		log.Println(err)
 	} else {
