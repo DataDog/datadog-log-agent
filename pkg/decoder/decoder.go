@@ -14,6 +14,9 @@ import (
 	"github.com/DataDog/datadog-log-agent/pkg/message"
 )
 
+// defaultCountDownDuration represents the time after which the buffered line is sent when there is no more incoming data
+const defaultCountDownDuration = 1 * time.Second
+
 // Payload represents a list of bytes coming from a file and an optional reference to its origin
 type Payload struct {
 	content []byte
@@ -28,13 +31,14 @@ func NewPayload(content []byte, offset int64) *Payload {
 // Decoder splits raw data into messages using '\n' for single-line logs and re for multi-line logs
 // and sends them to a channel
 type Decoder struct {
-	InputChan  chan *Payload
-	OutputChan chan message.Message
-	lineBuffer *bytes.Buffer
-	msgBuffer  *bytes.Buffer
-	re         *regexp.Regexp
-	timer      *time.Timer
-	singleline bool
+	InputChan         chan *Payload
+	OutputChan        chan message.Message
+	countDownDuration time.Duration
+	lineBuffer        *bytes.Buffer
+	msgBuffer         *bytes.Buffer
+	re                *regexp.Regexp
+	timer             *time.Timer
+	singleline        bool
 }
 
 // InitializeDecoder returns a properly initialized Decoder
@@ -51,19 +55,20 @@ func InitializeDecoder(source *config.IntegrationConfigLogSource) *Decoder {
 
 	inputChan := make(chan *Payload)
 	outputChan := make(chan message.Message)
-	return New(inputChan, outputChan, re, singleline)
+	return New(inputChan, outputChan, defaultCountDownDuration, re, singleline)
 }
 
 // New returns an initialized Decoder
-func New(InputChan chan *Payload, OutputChan chan message.Message, re *regexp.Regexp, singleline bool) *Decoder {
+func New(InputChan chan *Payload, OutputChan chan message.Message, countDownDuration time.Duration, re *regexp.Regexp, singleline bool) *Decoder {
 	var lineBuffer, msgBuf bytes.Buffer
 	return &Decoder{
-		InputChan:  InputChan,
-		OutputChan: OutputChan,
-		lineBuffer: &lineBuffer,
-		msgBuffer:  &msgBuf,
-		re:         re,
-		singleline: singleline,
+		InputChan:         InputChan,
+		OutputChan:        OutputChan,
+		countDownDuration: countDownDuration,
+		lineBuffer:        &lineBuffer,
+		msgBuffer:         &msgBuf,
+		re:                re,
+		singleline:        singleline,
 	}
 }
 
@@ -88,20 +93,21 @@ func (d *Decoder) run() {
 	d.OutputChan <- message.NewStopMessage()
 }
 
-// waitingDuration represents the time after which the buffered line is sent when there is no more incoming data
-const waitingDuration = 1 * time.Second
-
 // stopCountDown prevents the timer for firing
 func (d *Decoder) stopCountDown() {
-	if d.timer != nil {
+	if !d.singleline && d.timer != nil {
 		d.timer.Stop()
 	}
 }
 
 // restartCountDown starts the timer and sends the last line when it fires
 func (d *Decoder) restartCountDown(offset int64) {
-	d.timer = time.AfterFunc(waitingDuration, func() {
-		newLine := d.lineBuffer.Bytes()
+	if d.singleline {
+		return
+	}
+	d.timer = time.AfterFunc(d.countDownDuration, func() {
+		newLine := make([]byte, d.lineBuffer.Len())
+		copy(newLine, d.lineBuffer.Bytes())
 		defer d.lineBuffer.Reset()
 		d.msgBuffer.Write(newLine)
 		d.sendBufferedMessage(offset)
@@ -110,7 +116,7 @@ func (d *Decoder) restartCountDown(offset int64) {
 
 var truncatedMsg = []byte("...TRUNCATED...")
 var truncatedLen = len(truncatedMsg)
-var maxMessageLen = config.MaxMessageLen - 2*truncatedLen // worse case scenario being "...TRUNCATED...MSG...TRUNCATED..."
+var maxMessageLen = config.MaxMessageLen - truncatedLen
 
 // sendBufferedMessage flushes the buffer and sends the message
 func (d *Decoder) sendBufferedMessage(offset int64) {
@@ -130,7 +136,8 @@ func (d *Decoder) sendBufferedMessage(offset int64) {
 // processBufferedLine checks the new line, appends the whole line or just a piece to the message
 // and sends the message if needed
 func (d *Decoder) processNewLine(offset int64) {
-	newLine := d.lineBuffer.Bytes()
+	newLine := make([]byte, d.lineBuffer.Len())
+	copy(newLine, d.lineBuffer.Bytes())
 	defer d.lineBuffer.Reset()
 
 	if d.singleline {
@@ -150,9 +157,9 @@ func (d *Decoder) processNewLine(offset int64) {
 		return
 	}
 
-	maxLen := maxMessageLen - d.msgBuffer.Len() - 1
+	maxLen := maxMessageLen - d.msgBuffer.Len() - 2
 	if len(newLine) >= maxLen {
-		d.msgBuffer.Write([]byte(`\n`))
+		d.msgBuffer.Write([]byte("\n"))
 		d.msgBuffer.Write(newLine[:maxLen])
 		d.msgBuffer.Write(truncatedMsg)
 		d.sendBufferedMessage(offset - int64(1+len(newLine[maxLen:]))) // remove '\n' + the length of the piece of the line that can't fit
@@ -162,13 +169,14 @@ func (d *Decoder) processNewLine(offset int64) {
 	}
 
 	// append a new line to the message
-	d.msgBuffer.Write([]byte(`\n`))
+	d.msgBuffer.Write([]byte("\n"))
 	d.msgBuffer.Write(newLine)
 }
 
 // recoverTooLongBufferedLine truncates the new line and sends its left part and the message if needed
 func (d *Decoder) recoverTooLongBufferedLine(offset int64) {
-	newLine := d.lineBuffer.Bytes()
+	newLine := make([]byte, d.lineBuffer.Len())
+	copy(newLine, d.lineBuffer.Bytes())
 	defer d.lineBuffer.Reset()
 
 	// truncate and send new line
@@ -204,7 +212,7 @@ func (d *Decoder) recoverTooLongBufferedLine(offset int64) {
 func (d *Decoder) decodeIncomingData(inBuf []byte, offset int64) (ok bool, newOffset int64) {
 	var i, j = 0, 0
 	var maxj = maxMessageLen - d.lineBuffer.Len()
-	// Note: we will truncate messages of length MaxLen - 2*truncatedLen
+	// Note: we will truncate messages of length MaxLen - truncatedLen
 	// instead of MaxLen. We'll live with it for now
 	for ; j < len(inBuf); j++ {
 		if inBuf[j] == '\n' {
