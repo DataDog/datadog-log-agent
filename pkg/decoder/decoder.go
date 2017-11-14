@@ -30,6 +30,7 @@ func NewPayload(content []byte, offset int64) *Payload {
 type Decoder struct {
 	InputChan  chan *Payload
 	OutputChan chan message.Message
+	countDownDuration time.Duration
 	lineBuffer *bytes.Buffer
 	msgBuffer  *bytes.Buffer
 	re         *regexp.Regexp
@@ -51,15 +52,16 @@ func InitializeDecoder(source *config.IntegrationConfigLogSource) *Decoder {
 
 	inputChan := make(chan *Payload)
 	outputChan := make(chan message.Message)
-	return New(inputChan, outputChan, re, singleline)
+	return New(inputChan, outputChan, defaultCountDownDuration, re, singleline)
 }
 
 // New returns an initialized Decoder
-func New(InputChan chan *Payload, OutputChan chan message.Message, re *regexp.Regexp, singleline bool) *Decoder {
+func New(InputChan chan *Payload, OutputChan chan message.Message, countDownDuration time.Duration, re *regexp.Regexp, singleline bool) *Decoder {
 	var lineBuffer, msgBuf bytes.Buffer
 	return &Decoder{
 		InputChan:  InputChan,
 		OutputChan: OutputChan,
+		countDownDuration: countDownDuration,
 		lineBuffer: &lineBuffer,
 		msgBuffer:  &msgBuf,
 		re:         re,
@@ -88,11 +90,14 @@ func (d *Decoder) run() {
 	d.OutputChan <- message.NewStopMessage()
 }
 
-// waitingDuration represents the time after which the buffered line is sent when there is no more incoming data
-const waitingDuration = 1 * time.Second
+// defaultCountDownDuration represents the time after which the buffered line is sent when there is no more incoming data
+const defaultCountDownDuration = 1 * time.Second
 
 // stopCountDown prevents the timer for firing
 func (d *Decoder) stopCountDown() {
+	if d.singleline {
+		return
+	}
 	if d.timer != nil {
 		d.timer.Stop()
 	}
@@ -100,8 +105,12 @@ func (d *Decoder) stopCountDown() {
 
 // restartCountDown starts the timer and sends the last line when it fires
 func (d *Decoder) restartCountDown(offset int64) {
-	d.timer = time.AfterFunc(waitingDuration, func() {
-		newLine := d.lineBuffer.Bytes()
+	if d.singleline {
+		return
+	}
+	d.timer = time.AfterFunc(d.countDownDuration, func() {
+		newLine := make([]byte, d.lineBuffer.Len())
+		copy(newLine, d.lineBuffer.Bytes())
 		defer d.lineBuffer.Reset()
 		d.msgBuffer.Write(newLine)
 		d.sendBufferedMessage(offset)
@@ -110,7 +119,7 @@ func (d *Decoder) restartCountDown(offset int64) {
 
 var truncatedMsg = []byte("...TRUNCATED...")
 var truncatedLen = len(truncatedMsg)
-var maxMessageLen = config.MaxMessageLen - 2*truncatedLen // worse case scenario being "...TRUNCATED...MSG...TRUNCATED..."
+var maxMessageLen = config.MaxMessageLen - truncatedLen
 
 // sendBufferedMessage flushes the buffer and sends the message
 func (d *Decoder) sendBufferedMessage(offset int64) {
@@ -130,7 +139,8 @@ func (d *Decoder) sendBufferedMessage(offset int64) {
 // processBufferedLine checks the new line, appends the whole line or just a piece to the message
 // and sends the message if needed
 func (d *Decoder) processNewLine(offset int64) {
-	newLine := d.lineBuffer.Bytes()
+	newLine := make([]byte, d.lineBuffer.Len())
+	copy(newLine, d.lineBuffer.Bytes())
 	defer d.lineBuffer.Reset()
 
 	if d.singleline {
@@ -150,7 +160,7 @@ func (d *Decoder) processNewLine(offset int64) {
 		return
 	}
 
-	maxLen := maxMessageLen - d.msgBuffer.Len() - 1
+	maxLen := maxMessageLen - d.msgBuffer.Len() - 2 
 	if len(newLine) >= maxLen {
 		d.msgBuffer.Write([]byte(`\n`))
 		d.msgBuffer.Write(newLine[:maxLen])
@@ -168,7 +178,8 @@ func (d *Decoder) processNewLine(offset int64) {
 
 // recoverTooLongBufferedLine truncates the new line and sends its left part and the message if needed
 func (d *Decoder) recoverTooLongBufferedLine(offset int64) {
-	newLine := d.lineBuffer.Bytes()
+	newLine := make([]byte, d.lineBuffer.Len())
+	copy(newLine, d.lineBuffer.Bytes())
 	defer d.lineBuffer.Reset()
 
 	// truncate and send new line
@@ -204,7 +215,7 @@ func (d *Decoder) recoverTooLongBufferedLine(offset int64) {
 func (d *Decoder) decodeIncomingData(inBuf []byte, offset int64) (ok bool, newOffset int64) {
 	var i, j = 0, 0
 	var maxj = maxMessageLen - d.lineBuffer.Len()
-	// Note: we will truncate messages of length MaxLen - 2*truncatedLen
+	// Note: we will truncate messages of length MaxLen - truncatedLen
 	// instead of MaxLen. We'll live with it for now
 	for ; j < len(inBuf); j++ {
 		if inBuf[j] == '\n' {
