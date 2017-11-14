@@ -19,7 +19,7 @@ import (
 
 func TestDecodeIncomingDataForSingleLineLogs(t *testing.T) {
 	outChan := make(chan message.Message, 10)
-	d := New(nil, outChan, time.Millisecond, nil, true)
+	d := New(nil, outChan, time.Millisecond, false, nil)
 
 	var out message.Message
 
@@ -98,8 +98,7 @@ func TestDecodeIncomingDataForMultiLineLogs(t *testing.T) {
 	inChan := make(chan *Payload, 10)
 	outChan := make(chan message.Message, 10)
 	re := regexp.MustCompile("[0-9]+\\.")
-	singleLine := false
-	d := New(inChan, outChan, time.Millisecond, re, singleLine)
+	d := New(inChan, outChan, time.Millisecond, true, re)
 
 	var out message.Message
 	go d.run()
@@ -185,7 +184,7 @@ func TestDecodeIncomingDataForMultiLineLogs(t *testing.T) {
 func TestDecoderLifecycle(t *testing.T) {
 	inChan := make(chan *Payload, 10)
 	outChan := make(chan message.Message, 10)
-	d := New(inChan, outChan, time.Millisecond, nil, true)
+	d := New(inChan, outChan, time.Millisecond, false, nil)
 	d.Start()
 	var out message.Message
 
