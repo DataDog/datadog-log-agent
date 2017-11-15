@@ -14,63 +14,65 @@ import (
 	"github.com/DataDog/datadog-log-agent/pkg/message"
 )
 
-// defaultCountDownDuration represents the time after which the buffered line is sent when there is no more incoming data
-const defaultCountDownDuration = 1 * time.Second
+// countDownDuration represents the time after which the buffered line is sent when there is no more incoming data
+const countDownDuration = 1 * time.Second
 
-// Payload represents a list of bytes and an optional reference to its origin
+// maxMessageLen represents the maximum length for a message
+var maxMessageLen = config.MaxMessageLen
 
+// Payload represents a list of bytes
 type Payload struct {
 	content []byte
-	offset  int64 // when set, offset represents the position of the data in a file
 }
 
 // NewPayload returns a new decoder payload
-func NewPayload(content []byte, offset int64) *Payload {
-	return &Payload{content, offset}
+func NewPayload(content []byte) *Payload {
+	return &Payload{content}
 }
 
-// Decoder splits raw data into messages using '\n' for single-line logs and re for multi-line logs
+// Decoder splits raw data into messages using '\n' for single-line logs and lineRe for multi-line logs
 // and sends them to a channel
 type Decoder struct {
-	InputChan         chan *Payload
-	OutputChan        chan message.Message
-	countDownDuration time.Duration
-	isMultiLine       bool
-	lineBuffer        *bytes.Buffer
-	msgBuffer         *bytes.Buffer
-	newLineRe         *regexp.Regexp
-	timer             *time.Timer
+	InputChan  chan *Payload
+	OutputChan chan message.Message
+
+	msgBuffer  *bytes.Buffer
+	lineBuffer *bytes.Buffer
+
+	timer  *time.Timer
+	lineRe *regexp.Regexp
 }
 
 // InitializeDecoder returns a properly initialized Decoder
 func InitializeDecoder(source *config.IntegrationConfigLogSource) *Decoder {
-	var isMultiLine bool = false
-	var newLineRe *regexp.Regexp
+	var lineRe *regexp.Regexp
 	for _, rule := range source.ProcessingRules {
 		switch rule.Type {
 		case config.MULTILINE:
-			isMultiLine = true
-			newLineRe = rule.Reg
+			lineRe = rule.Reg
 		}
 	}
 
 	inputChan := make(chan *Payload)
 	outputChan := make(chan message.Message)
-	return New(inputChan, outputChan, defaultCountDownDuration, isMultiLine, newLineRe)
+	return New(inputChan, outputChan, lineRe)
 }
 
 // New returns an initialized Decoder
-func New(InputChan chan *Payload, OutputChan chan message.Message, countDownDuration time.Duration, isMultiLine bool, newLineRe *regexp.Regexp) *Decoder {
-	var lineBuffer, msgBuf bytes.Buffer
+func New(InputChan chan *Payload, OutputChan chan message.Message, lineRe *regexp.Regexp) *Decoder {
+	var msgBuffer, lineBuffer bytes.Buffer
 	return &Decoder{
-		InputChan:         InputChan,
-		OutputChan:        OutputChan,
-		countDownDuration: countDownDuration,
-		isMultiLine:       isMultiLine,
-		lineBuffer:        &lineBuffer,
-		msgBuffer:         &msgBuf,
-		newLineRe:         newLineRe,
+		InputChan:  InputChan,
+		OutputChan: OutputChan,
+		msgBuffer:  &msgBuffer,
+		lineBuffer: &lineBuffer,
+		lineRe:     lineRe,
 	}
+}
+
+// isMultiLineEnabled returns true if the decoder supports multi-line logs
+func (d *Decoder) isMultiLineEnabled() bool {
+	return d.lineRe != nil
 }
 
 // Start starts the Decoder
@@ -86,152 +88,120 @@ func (d *Decoder) Stop() {
 // run lets the Decoder handle data coming from the InputChan
 func (d *Decoder) run() {
 	for data := range d.InputChan {
-		d.stopCountDown()
-		if endsWithEOL, offset := d.decodeIncomingData(data.content, data.offset); endsWithEOL {
-			d.restartCountDown(offset)
+		if d.isMultiLineEnabled() {
+			d.ackIncomingData()
+			endedWithEOL := d.decodeIncomingData(data.content)
+			if endedWithEOL {
+				d.ackEndIncomingData()
+			}
+		} else {
+			d.decodeIncomingData(data.content)
 		}
+
 	}
 	d.OutputChan <- message.NewStopMessage()
 }
 
-// stopCountDown prevents the timer for firing
-func (d *Decoder) stopCountDown() {
-	if d.isMultiLine && d.timer != nil {
+// ackIncomingData stops the timer which flushes the multi-line buffer as we got new data
+func (d *Decoder) ackIncomingData() {
+	if d.timer != nil {
 		d.timer.Stop()
 	}
 }
 
-// restartCountDown starts the timer and sends the last line when it fires
-func (d *Decoder) restartCountDown(offset int64) {
-	if d.isMultiLine {
-		d.timer = time.AfterFunc(d.countDownDuration, func() {
-			newLine := make([]byte, d.lineBuffer.Len())
-			copy(newLine, d.lineBuffer.Bytes())
-			defer d.lineBuffer.Reset()
-			d.msgBuffer.Write(newLine)
-			d.sendBufferedMessage(offset)
-		})
-	}
-}
-
-var truncatedMsg = []byte("...TRUNCATED...")
-var truncatedLen = len(truncatedMsg)
-var maxMessageLen = config.MaxMessageLen - truncatedLen
-
-// sendBufferedMessage flushes the buffer and sends the message
-func (d *Decoder) sendBufferedMessage(offset int64) {
-	msg := make([]byte, d.msgBuffer.Len())
-	// d.msgBuffer.Bytes() returns a slice to the []byte, we thus need to copy it
-	copy(msg, d.msgBuffer.Bytes())
-	if len(msg) > 0 {
-		m := message.NewMessage(msg)
-		o := message.NewOrigin()
-		o.Offset = offset
-		m.SetOrigin(o)
-		d.OutputChan <- m
-	}
-	d.msgBuffer.Reset()
-}
-
-// processBufferedLine checks the new line, appends the whole line or just a piece to the message
-// and sends the message if needed
-func (d *Decoder) processNewLine(offset int64) {
-	newLine := make([]byte, d.lineBuffer.Len())
-	copy(newLine, d.lineBuffer.Bytes())
-	defer d.lineBuffer.Reset()
-
-	if !d.isMultiLine {
-		d.msgBuffer.Write(newLine)
-		d.sendBufferedMessage(offset)
-		return
-	}
-
-	if d.msgBuffer.Len() == 0 {
-		d.msgBuffer.Write(newLine)
-		return
-	}
-
-	if d.newLineRe.Match(newLine) {
-		d.sendBufferedMessage(offset - int64(1+len(newLine))) // remove '\n' + new line length
-		d.msgBuffer.Write(newLine)
-		return
-	}
-
-	maxLen := maxMessageLen - d.msgBuffer.Len() - 2
-	if len(newLine) >= maxLen {
-		d.msgBuffer.Write([]byte(`\n`))
-		d.msgBuffer.Write(newLine[:maxLen])
-		d.msgBuffer.Write(truncatedMsg)
-		d.sendBufferedMessage(offset - int64(1+len(newLine[maxLen:]))) // remove '\n' + the length of the piece of the line that can't fit
-		d.msgBuffer.Write(truncatedMsg)
-		d.msgBuffer.Write(newLine[maxLen:])
-		return
-	}
-
-	// append a new line to the message
-	d.msgBuffer.Write([]byte(`\n`))
-	d.msgBuffer.Write(newLine)
-}
-
-// recoverTooLongBufferedLine truncates the new line and sends its left part and the message if needed
-func (d *Decoder) recoverTooLongBufferedLine(offset int64) {
-	newLine := make([]byte, d.lineBuffer.Len())
-	copy(newLine, d.lineBuffer.Bytes())
-	defer d.lineBuffer.Reset()
-
-	// truncate and send new line
-	truncAndSendLine := func() {
-		newLine = append(newLine, truncatedMsg...)
-		d.msgBuffer.Write(newLine)
-		d.sendBufferedMessage(offset)
-		d.msgBuffer.Write(truncatedMsg)
-	}
-
-	if !d.isMultiLine || d.msgBuffer.Len() == 0 {
-		truncAndSendLine()
-		return
-	}
-
-	if d.newLineRe.Match(newLine) {
-		d.sendBufferedMessage(offset - int64(len(newLine)))
-		truncAndSendLine()
-		return
-	}
-
-	maxLen := maxMessageLen - d.msgBuffer.Len() - 1
-	d.msgBuffer.Write([]byte(`\n`))
-	d.msgBuffer.Write(newLine[:maxLen])
-	d.msgBuffer.Write(truncatedMsg)
-	d.sendBufferedMessage(offset - int64(len(newLine[maxLen:]))) // remove the length of the line that can't fit
-	d.msgBuffer.Write(truncatedMsg)
-	d.msgBuffer.Write(newLine[maxLen:])
+// ackEndIncomingData starts the timer which flushes the multi-line buffer
+func (d *Decoder) ackEndIncomingData() {
+	d.timer = time.AfterFunc(countDownDuration, func() {
+		d.sendMessage()
+	})
 }
 
 // decodeIncomingData splits raw data based on `\n`, creates and processes new lines
-// returns true and the new offset if the end of inBuf is likely to be the end of a message
-func (d *Decoder) decodeIncomingData(inBuf []byte, offset int64) (endsWithEOL bool, newOffset int64) {
-	var i, j = 0, 0
-	var maxj = maxMessageLen - d.lineBuffer.Len()
-	// Note: we will truncate messages of length MaxLen - truncatedLen
-	// instead of MaxLen. We'll live with it for now
-	for ; j < len(inBuf); j++ {
-		if inBuf[j] == '\n' {
+// returns true if inBuf ends with `\n`
+func (d *Decoder) decodeIncomingData(inBuf []byte) (endsWithEOL bool) {
+	i, j := 0, 0
+	n := len(inBuf)
+	maxj := i + maxMessageLen - d.lineBuffer.Len()
+
+	for ; j < n; j++ {
+		if j == maxj {
+			// process the line as it is too long
 			d.lineBuffer.Write(inBuf[i:j])
-			d.processNewLine(offset + int64(j+1))
-			i = j + 1 // +1 as we skip the `\n`
-			maxj = maxMessageLen - d.lineBuffer.Len()
-		} else if j == maxj {
-			d.lineBuffer.Write(inBuf[i:j])
-			d.recoverTooLongBufferedLine(offset + int64(j))
+			d.processLine()
 			i = j
-			maxj = maxMessageLen - d.lineBuffer.Len()
+			maxj = i + maxMessageLen
+		} else if inBuf[j] == '\n' {
+			d.lineBuffer.Write(inBuf[i:j])
+			d.processLine()
+			i = j + 1 // +1 as we skip the `\n`
+			maxj = i + maxMessageLen
 		}
 	}
 	d.lineBuffer.Write(inBuf[i:j])
 
-	if len(inBuf) > 0 && inBuf[j-1] == '\n' {
+	// check if inBuf ends with `\n`
+	if len(inBuf) > 0 && inBuf[n-1] == '\n' {
 		endsWithEOL = true
 	}
-	newOffset = offset + int64(j)
-	return endsWithEOL, newOffset
+	return endsWithEOL
+}
+
+// processLine appends new line to the message, sends and truncates messages
+func (d *Decoder) processLine() {
+	line := d.lineBuffer.Bytes()
+	defer d.lineBuffer.Reset()
+
+	isLineAdded := false
+	if d.isMultiLineEnabled() {
+		if d.lineRe.Match(line) {
+			d.sendMessage()
+		}
+		isLineAdded = d.appendLine(line)
+	} else {
+		isLineAdded = d.appendLine(line)
+		if isLineAdded {
+			d.sendMessage()
+		}
+	}
+	if !isLineAdded {
+		d.truncateAndSendMessage(line)
+	}
+}
+
+// appendLine attemps to add the new line to the message if there is enough space in msgBuf
+// returns true if the line is added to the message
+func (d *Decoder) appendLine(line []byte) bool {
+	maxLineLen := maxMessageLen - d.msgBuffer.Len()
+	if len(line) < maxLineLen {
+		if d.msgBuffer.Len() != 0 {
+			d.msgBuffer.Write([]byte(`\n`))
+		}
+		d.msgBuffer.Write(line)
+		return true
+	}
+	return false
+}
+
+// truncateAndSendMessage appends the new line to to msgBuf and sends the message
+// the order of the operations changes for multi-line logs
+func (d *Decoder) truncateAndSendMessage(line []byte) {
+	if d.isMultiLineEnabled() {
+		d.sendMessage()
+		d.msgBuffer.Write(line)
+	} else {
+		d.msgBuffer.Write(line)
+		d.sendMessage()
+	}
+}
+
+// sendMessage sends the message and flushes msgBuf
+func (d *Decoder) sendMessage() {
+	msg := make([]byte, d.msgBuffer.Len())
+	copy(msg, d.msgBuffer.Bytes())
+	defer d.msgBuffer.Reset()
+
+	if len(msg) > 0 {
+		m := message.NewMessage(msg)
+		d.OutputChan <- m
+	}
 }

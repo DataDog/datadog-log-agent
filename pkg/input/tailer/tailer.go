@@ -150,7 +150,7 @@ func (t *Tailer) forwardMessages() {
 		}
 
 		fileMsg := message.NewFileMessage(msg.Content())
-		msgOffset := msg.GetOrigin().Offset
+		msgOffset := t.lastOffset + int64(len(msg.Content())+1)
 		identifier := t.Identifier()
 		if !t.shouldTrackOffset {
 			msgOffset = 0
@@ -192,7 +192,7 @@ func (t *Tailer) readForever() {
 			t.wait()
 			continue
 		}
-		t.d.InputChan <- decoder.NewPayload(inBuf[:n], t.GetLastOffset())
+		t.d.InputChan <- decoder.NewPayload(inBuf[:n])
 		t.incrementLastOffset(n)
 	}
 }

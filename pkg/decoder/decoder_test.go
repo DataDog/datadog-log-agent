@@ -12,25 +12,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestDecodeIncomingDataForSingleLineLogs(t *testing.T) {
 	outChan := make(chan message.Message, 10)
-	d := New(nil, outChan, time.Millisecond, false, nil)
+	d := New(nil, outChan, nil)
 
 	var out message.Message
 
 	// multiple messages in one buffer
-	d.decodeIncomingData([]byte(("helloworld\n")), 0)
+	d.decodeIncomingData([]byte("helloworld\n"))
 	out = <-outChan
 	assert.Equal(t, "helloworld", string(out.Content()))
 	assert.Equal(t, "", d.lineBuffer.String())
 	assert.Equal(t, "", d.msgBuffer.String())
 
-	d.decodeIncomingData([]byte(("helloworld\nhowayou\ngoodandyou")), 0)
+	d.decodeIncomingData([]byte("helloworld\nhowayou\ngoodandyou"))
 	out = <-outChan
 	assert.Equal(t, "helloworld", string(out.Content()))
 	out = <-outChan
@@ -40,9 +39,9 @@ func TestDecodeIncomingDataForSingleLineLogs(t *testing.T) {
 	d.lineBuffer.Reset()
 
 	// messages overflow in the next buffer
-	d.decodeIncomingData([]byte(("helloworld\nthisisa")), 5)
+	d.decodeIncomingData([]byte("helloworld\nthisisa"))
 	assert.Equal(t, "thisisa", d.lineBuffer.String())
-	d.decodeIncomingData([]byte(("longinput\nindeed")), 15)
+	d.decodeIncomingData([]byte("longinput\nindeed"))
 	out = <-outChan
 	out = <-outChan
 	assert.Equal(t, "thisisalonginput", string(out.Content()))
@@ -50,128 +49,172 @@ func TestDecodeIncomingDataForSingleLineLogs(t *testing.T) {
 	d.lineBuffer.Reset()
 
 	// edge cases, do not crash
-	d.decodeIncomingData([]byte(("\n\n")), 0)
-	d.decodeIncomingData([]byte(("")), 0)
+	d.decodeIncomingData([]byte("\n\n"))
+	d.decodeIncomingData([]byte(""))
 
 	// buffer overflow
 	d.lineBuffer.Reset()
-	d.decodeIncomingData([]byte(("hello world")), 0)
-	d.decodeIncomingData([]byte(("!\n")), 0)
+	d.decodeIncomingData([]byte("hello world"))
+	d.decodeIncomingData([]byte("!\n"))
 	out = <-outChan
 	assert.Equal(t, "hello world!", string(out.Content()))
 
 	// message too big
 	d.lineBuffer.Reset()
-	d.decodeIncomingData([]byte((strings.Repeat("a", config.MaxMessageLen+5) + "\n")), 0)
+	d.decodeIncomingData([]byte(strings.Repeat("a", maxMessageLen+5) + "\n"))
 	out = <-outChan
-	assert.Equal(t, config.MaxMessageLen, len(out.Content()))
+	assert.Equal(t, maxMessageLen, len(out.Content()))
 	out = <-outChan
-	assert.Equal(t, "...TRUNCATED..."+strings.Repeat("a", 20), string(out.Content()))
+	assert.Equal(t, strings.Repeat("a", 5), string(out.Content()))
 
 	// message too big, over several calls
-	d.decodeIncomingData([]byte((strings.Repeat("a", config.MaxMessageLen-20))), 0)
-	d.decodeIncomingData([]byte((strings.Repeat("a", 25) + "\n")), 0)
+	d.decodeIncomingData([]byte(strings.Repeat("a", maxMessageLen-5)))
+	d.decodeIncomingData([]byte(strings.Repeat("a", 25) + "\n"))
 	out = <-outChan
-	assert.Equal(t, config.MaxMessageLen, len(out.Content()))
+	assert.Equal(t, maxMessageLen, len(out.Content()))
 	out = <-outChan
-	assert.Equal(t, "...TRUNCATED..."+strings.Repeat("a", 20), string(out.Content()))
+	assert.Equal(t, strings.Repeat("a", 20), string(out.Content()))
 
-	// message too big
+	// message twice too big
 	d.lineBuffer.Reset()
-	d.decodeIncomingData([]byte((strings.Repeat("a", config.MaxMessageLen-15) + "\n")), 0)
+	d.decodeIncomingData([]byte(strings.Repeat("a", 2*maxMessageLen+5) + "\n"))
 	out = <-outChan
-	assert.Equal(t, config.MaxMessageLen-15, len(out.Content()))
+	assert.Equal(t, maxMessageLen, len(out.Content()))
+	out = <-outChan
+	assert.Equal(t, maxMessageLen, len(out.Content()))
+	out = <-outChan
+	assert.Equal(t, strings.Repeat("a", 5), string(out.Content()))
 
-	// decoder offset management
+	// message twice too big, over several calls
 	d.lineBuffer.Reset()
-	d.decodeIncomingData([]byte(("6789\n121416182022\n2527")), 5)
-	d.decodeIncomingData([]byte(("29\n")), 27)
+	d.decodeIncomingData([]byte(strings.Repeat("a", maxMessageLen+5)))
+	d.decodeIncomingData([]byte(strings.Repeat("a", maxMessageLen+5) + "\n"))
 	out = <-outChan
-	assert.Equal(t, int64(10), out.GetOrigin().Offset)
+	assert.Equal(t, maxMessageLen, len(out.Content()))
 	out = <-outChan
-	assert.Equal(t, int64(23), out.GetOrigin().Offset)
+	assert.Equal(t, maxMessageLen, len(out.Content()))
 	out = <-outChan
-	assert.Equal(t, int64(30), out.GetOrigin().Offset)
+	assert.Equal(t, strings.Repeat("a", 10), string(out.Content()))
 }
 
 func TestDecodeIncomingDataForMultiLineLogs(t *testing.T) {
 	inChan := make(chan *Payload, 10)
 	outChan := make(chan message.Message, 10)
 	re := regexp.MustCompile("[0-9]+\\.")
-	d := New(inChan, outChan, time.Millisecond, true, re)
+	d := New(inChan, outChan, re)
 
 	var out message.Message
 	go d.run()
 
-	// simple message in one raw data
-	inChan <- NewPayload([]byte("1. Hello\nworld!\n"), 5)
+	// two lines message in one raw data
+	inChan <- NewPayload([]byte("1. Hello\nworld!\n"))
 	out = <-outChan
 	assert.Equal(t, "1. Hello\\nworld!", string(out.Content()))
-	assert.Equal(t, int64(21), out.GetOrigin().Offset)
 	assert.Equal(t, "", d.lineBuffer.String())
 	assert.Equal(t, "", d.msgBuffer.String())
 
 	// multiple messages in one raw data
-	inChan <- NewPayload([]byte("1. Hello\nworld!\n2. How are you\n"), 5)
+	inChan <- NewPayload([]byte("1. Hello\nworld!\n2. How are you\n"))
 	out = <-outChan
 	assert.Equal(t, "1. Hello\\nworld!", string(out.Content()))
-	assert.Equal(t, int64(21), out.GetOrigin().Offset)
 	out = <-outChan
 	assert.Equal(t, "2. How are you", string(out.Content()))
-	assert.Equal(t, int64(36), out.GetOrigin().Offset)
 	assert.Equal(t, "", d.lineBuffer.String())
 	assert.Equal(t, "", d.msgBuffer.String())
 
-	// simple message across two raw data
-	inChan <- NewPayload([]byte("1. Hello\n"), 5)
-	inChan <- NewPayload([]byte("world!\n"), 14)
+	// two lines message over two raw data
+	inChan <- NewPayload([]byte("1. Hello\n"))
+	inChan <- NewPayload([]byte("world!\n"))
 	out = <-outChan
 	assert.Equal(t, "1. Hello\\nworld!", string(out.Content()))
-	assert.Equal(t, int64(21), out.GetOrigin().Offset)
 	assert.Equal(t, "", d.lineBuffer.String())
 	assert.Equal(t, "", d.msgBuffer.String())
 
 	// multiple messages accross two raw data
-	inChan <- NewPayload([]byte("1. Hello\n"), 5)
-	inChan <- NewPayload([]byte("world!\n2. How are you\n"), 14)
+	inChan <- NewPayload([]byte("1. Hello\n"))
+	inChan <- NewPayload([]byte("world!\n2. How are you\n"))
 	out = <-outChan
 	assert.Equal(t, "1. Hello\\nworld!", string(out.Content()))
-	assert.Equal(t, int64(21), out.GetOrigin().Offset)
 	out = <-outChan
 	assert.Equal(t, "2. How are you", string(out.Content()))
-	assert.Equal(t, int64(36), out.GetOrigin().Offset)
 	assert.Equal(t, "", d.lineBuffer.String())
 	assert.Equal(t, "", d.msgBuffer.String())
 
 	// single-line message in one raw data
-	inChan <- NewPayload([]byte("1. Hello world!\n"), 5)
+	inChan <- NewPayload([]byte("1. Hello world!\n"))
 	out = <-outChan
 	assert.Equal(t, "1. Hello world!", string(out.Content()))
-	assert.Equal(t, int64(21), out.GetOrigin().Offset)
 	assert.Equal(t, "", d.lineBuffer.String())
 	assert.Equal(t, "", d.msgBuffer.String())
 
 	// multiple single-line messages in one raw data
-	inChan <- NewPayload([]byte("1. Hello world!\n2. How are you\n"), 5)
+	inChan <- NewPayload([]byte("1. Hello world!\n2. How are you\n"))
 	out = <-outChan
 	assert.Equal(t, "1. Hello world!", string(out.Content()))
-	assert.Equal(t, int64(21), out.GetOrigin().Offset)
 	out = <-outChan
 	assert.Equal(t, "2. How are you", string(out.Content()))
-	assert.Equal(t, int64(36), out.GetOrigin().Offset)
 	assert.Equal(t, "", d.lineBuffer.String())
 	assert.Equal(t, "", d.msgBuffer.String())
 
-	// big message across two lines
-	inChan <- NewPayload([]byte("123456789\n"), 5)
-	inChan <- NewPayload([]byte(strings.Repeat("a", maxMessageLen-6)+"\n"), 25)
+	// two lines big message in one raw data
+	inChan <- NewPayload([]byte("12345678.\n" + strings.Repeat("a", maxMessageLen-5) + "\n"))
 	out = <-outChan
-	assert.Equal(t, config.MaxMessageLen, len(out.Content()))
+	assert.Equal(t, "12345678.", string(out.Content()))
 	out = <-outChan
-	assert.Equal(t, "...TRUNCATED..."+strings.Repeat("a", 5), string(out.Content()))
+	assert.Equal(t, +maxMessageLen-5, len(out.Content()))
+
+	// two lines big message over two raw data
+	inChan <- NewPayload([]byte("12345678.\n"))
+	inChan <- NewPayload([]byte(strings.Repeat("a", maxMessageLen-5) + "\n"))
+	out = <-outChan
+	assert.Equal(t, "12345678.", string(out.Content()))
+	out = <-outChan
+	assert.Equal(t, +maxMessageLen-5, len(out.Content()))
+
+	// two lines too big message in one raw data
+	inChan <- NewPayload([]byte("12345678.\n" + strings.Repeat("a", maxMessageLen+5) + "\n"))
+	out = <-outChan
+	assert.Equal(t, "12345678.", string(out.Content()))
+	out = <-outChan
+	out = <-outChan
+	assert.Equal(t, strings.Repeat("a", 5), string(out.Content()))
+
+	// single-line big message over two raw data
+	inChan <- NewPayload([]byte(strings.Repeat("a", maxMessageLen)))
+	inChan <- NewPayload([]byte(strings.Repeat("a", 5) + "\n"))
+	out = <-outChan
+	assert.Equal(t, maxMessageLen, len(out.Content()))
+	out = <-outChan
+	assert.Equal(t, strings.Repeat("a", 5), string(out.Content()))
+
+	// single-line too big message in one raw data
+	inChan <- NewPayload([]byte(strings.Repeat("a", maxMessageLen+5) + "\n"))
+	out = <-outChan
+	assert.Equal(t, maxMessageLen, len(out.Content()))
+	out = <-outChan
+	assert.Equal(t, strings.Repeat("a", 5), string(out.Content()))
+
+	// message twice too big in one raw data
+	inChan <- NewPayload([]byte(strings.Repeat("a", 2*maxMessageLen+5) + "\n"))
+	out = <-outChan
+	assert.Equal(t, maxMessageLen, len(out.Content()))
+	out = <-outChan
+	assert.Equal(t, maxMessageLen, len(out.Content()))
+	out = <-outChan
+	assert.Equal(t, strings.Repeat("a", 5), string(out.Content()))
+
+	// message twice too big over two raw data
+	inChan <- NewPayload([]byte(strings.Repeat("a", maxMessageLen+5)))
+	inChan <- NewPayload([]byte(strings.Repeat("a", maxMessageLen+5) + "\n"))
+	out = <-outChan
+	assert.Equal(t, maxMessageLen, len(out.Content()))
+	out = <-outChan
+	assert.Equal(t, maxMessageLen, len(out.Content()))
+	out = <-outChan
+	assert.Equal(t, strings.Repeat("a", 10), string(out.Content()))
 
 	// pending message in one raw data
-	inChan <- NewPayload([]byte(("1. Hello world!")), 5)
+	inChan <- NewPayload([]byte(("1. Hello world!")))
 	timeout := time.NewTimer(1*time.Second + 1*time.Millisecond)
 	select {
 	case out = <-outChan:
@@ -184,11 +227,11 @@ func TestDecodeIncomingDataForMultiLineLogs(t *testing.T) {
 func TestDecoderLifecycle(t *testing.T) {
 	inChan := make(chan *Payload, 10)
 	outChan := make(chan message.Message, 10)
-	d := New(inChan, outChan, time.Millisecond, false, nil)
+	d := New(inChan, outChan, nil)
 	d.Start()
 	var out message.Message
 
-	inChan <- NewPayload([]byte(("helloworld\n")), 0)
+	inChan <- NewPayload([]byte("helloworld\n"))
 	out = <-outChan
 	assert.Equal(t, "helloworld", string(out.Content()))
 

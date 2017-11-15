@@ -71,6 +71,6 @@ func (anl *AbstractNetworkListener) handleConnection(conn net.Conn) {
 			d.Stop()
 			return
 		}
-		d.InputChan <- decoder.NewPayload(inBuf[:n], 0) // we don't pass an offset for a network message
+		d.InputChan <- decoder.NewPayload(inBuf[:n]) // we don't pass an offset for a network message
 	}
 }
