@@ -58,7 +58,7 @@ func TestBuildLogsAgentIntegrationsConfigs(t *testing.T) {
 }
 
 func TestBuildTagsPayload(t *testing.T) {
-	assert.Equal(t, "-", string(buildTagsPayload("", "", "")))
-	assert.Equal(t, "[dd ddtags=\"hello:world\"]", string(buildTagsPayload("hello:world", "", "")))
-	assert.Equal(t, "[dd ddsource=\"nginx\"][dd ddsourcecategory=\"http_access\"][dd ddtags=\"hello:world, hi\"]", string(buildTagsPayload("hello:world, hi", "nginx", "http_access")))
+	assert.Equal(t, "-", string(BuildTagsPayload("", "", "")))
+	assert.Equal(t, "[dd ddtags=\"hello:world\"]", string(BuildTagsPayload("hello:world", "", "")))
+	assert.Equal(t, "[dd ddsource=\"nginx\"][dd ddsourcecategory=\"http_access\"][dd ddtags=\"hello:world, hi\"]", string(BuildTagsPayload("hello:world, hi", "nginx", "http_access")))
 }
