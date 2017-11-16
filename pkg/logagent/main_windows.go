@@ -77,7 +77,7 @@ func (m *myservice) Execute(args []string, r <-chan svc.ChangeRequest, changes c
 				changes <- svc.Status{State: svc.StopPending}
 				///// FIXME:  Need a way to indicate to rest of service to shut
 				////  down
-				close(exit)
+				//close(exit)
 				break
 			default:
 				elog.Warning(0xc000000A, string(c.Cmd))
