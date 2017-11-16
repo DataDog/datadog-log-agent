@@ -7,8 +7,6 @@ package tailer
 
 import (
 	"log"
-	"os"
-	"syscall"
 	"time"
 
 	"github.com/DataDog/datadog-log-agent/pkg/auditor"
@@ -95,26 +93,8 @@ func (s *Scanner) run() {
 func (s *Scanner) scan() {
 	for _, source := range s.sources {
 		tailer := s.tailers[source.Path]
-		f, err := os.Open(source.Path)
-		if err != nil {
-			continue
-		}
-		stat1, err := f.Stat()
-		if err != nil {
-			continue
-		}
-		stat2, err := tailer.file.Stat()
-		if err != nil {
+		if tailer.checkForRotation() {
 			s.onFileRotation(tailer, source)
-			continue
-		}
-		if inode(stat1) != inode(stat2) {
-			s.onFileRotation(tailer, source)
-			continue
-		}
-
-		if stat1.Size() < tailer.GetLastOffset() {
-			tailer.reset()
 		}
 	}
 }
@@ -130,19 +110,5 @@ func (s *Scanner) Stop() {
 	shouldTrackOffset := true
 	for _, t := range s.tailers {
 		t.Stop(shouldTrackOffset)
-	}
-}
-
-// inode uniquely identifies a file on a filesystem
-func inode(f os.FileInfo) uint64 {
-	s := f.Sys()
-	if s == nil {
-		return 0
-	}
-	switch s := s.(type) {
-	case *syscall.Stat_t:
-		return uint64(s.Ino)
-	default:
-		return 0
 	}
 }

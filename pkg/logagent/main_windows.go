@@ -60,31 +60,34 @@ func (m *myservice) Execute(args []string, r <-chan svc.ChangeRequest, changes c
 
 	exit := make(chan struct{})
 
-	elog.Info(0x40000003, ServiceName)
-	runAgent(exit)
-
-	for {
-		select {
-		case c := <-r:
-			switch c.Cmd {
-			case svc.Interrogate:
-				changes <- c.CurrentStatus
-				// Testing deadlock from https://code.google.com/p/winsvc/issues/detail?id=4
-				time.Sleep(100 * time.Millisecond)
-				changes <- c.CurrentStatus
-			case svc.Stop, svc.Shutdown:
-				elog.Info(0x40000006, ServiceName)
-				changes <- svc.Status{State: svc.StopPending}
-				///// FIXME:  Need a way to indicate to rest of service to shut
-				////  down
-				//close(exit)
-				break
-			default:
-				elog.Warning(0xc000000A, string(c.Cmd))
+	go func() {
+		for {
+			select {
+			case c := <-r:
+				switch c.Cmd {
+				case svc.Interrogate:
+					changes <- c.CurrentStatus
+					// Testing deadlock from https://code.google.com/p/winsvc/issues/detail?id=4
+					time.Sleep(100 * time.Millisecond)
+					changes <- c.CurrentStatus
+				case svc.Stop, svc.Shutdown:
+					elog.Info(0x40000006, ServiceName)
+					changes <- svc.Status{State: svc.StopPending}
+					///// FIXME:  Need a way to indicate to rest of service to shut
+					////  down
+					close(exit)
+					break
+				default:
+					elog.Warning(0xc000000A, string(c.Cmd))
+				}
 			}
 		}
-	}
+	}()
+	elog.Info(0x40000003, ServiceName)
+	runAgent(exit)
+	for _ = range exit {
 
+	}
 	changes <- svc.Status{State: svc.Stopped}
 	return
 }
