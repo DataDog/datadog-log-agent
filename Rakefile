@@ -1,4 +1,18 @@
 
+def os
+  case RUBY_PLATFORM
+  when /linux/
+    "linux"
+  when /darwin/
+    "darwin"
+  when /x64-mingw32/
+    "windows"
+  else
+    fail 'Unsupported OS'
+  end
+end
+
+  
 desc "Run go fmt"
 task :fmt do
   `go fmt ./pkg/...`
@@ -27,7 +41,27 @@ end
 
 desc "Build the agent"
 task :build => %w[fmt lint vet] do
-  system("go build -tags=docker -o build/logagent ./pkg/logagent") || exit(1)
+  case os
+  when "windows"
+    bin = "logagent.exe"
+  else 
+    bin = "logagent"
+  end
+  if ENV['windres'] then
+    # first compile the message table, as it's an input to the resource file
+    msgcmd = "windmc --target pe-x86-64 -r pkg/logagent/windows_resources pkg/logagent/windows_resources/log-agent-msg.mc"
+    puts msgcmd
+    sh msgcmd
+    # for now, hardcode the version
+    agentversion = "1.0.0"
+    ver_array = agentversion.split(".")
+    rescmd = "windres --define MAJ_VER=#{ver_array[0]} --define MIN_VER=#{ver_array[1]} --define PATCH_VER=#{ver_array[2]} "
+    rescmd += "-i pkg/logagent/windows_resources/log-agent.rc --target=pe-x86-64 -O coff -o pkg/logagent/rsrc.syso"
+    sh rescmd
+
+  end
+  
+  system("go build -tags=docker -o build/#{bin} ./pkg/logagent") || exit(1)
 end
 
 desc "Build the agent on linux amd64"
