@@ -137,7 +137,7 @@ func (dt *DockerTailer) readForever() {
 			dt.wait()
 			continue
 		}
-		dt.d.InputChan <- decoder.NewPayload(inBuf[:n])
+		dt.d.InputChan <- decoder.NewPayload(inBuf[:n], nil)
 	}
 }
 

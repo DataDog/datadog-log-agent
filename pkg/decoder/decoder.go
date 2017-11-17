@@ -20,16 +20,6 @@ const countDownDuration = 1 * time.Second
 // maxMessageLen represents the maximum length for a message
 var maxMessageLen = config.MaxMessageLen
 
-// Payload represents a list of bytes
-type Payload struct {
-	content []byte
-}
-
-// NewPayload returns a new decoder payload
-func NewPayload(content []byte) *Payload {
-	return &Payload{content}
-}
-
 // Decoder splits raw data into messages using '\n' for single-line logs and lineRe for multi-line logs
 // and sends them to a channel
 type Decoder struct {
@@ -90,12 +80,12 @@ func (d *Decoder) run() {
 	for data := range d.InputChan {
 		if d.isMultiLineEnabled() {
 			d.ackIncomingData()
-			endedWithEOL := d.decodeIncomingData(data.content)
+			endedWithEOL := d.decodeIncomingData(data.content, data.context)
 			if endedWithEOL {
-				d.ackEndIncomingData()
+				d.ackEndIncomingData(data.context)
 			}
 		} else {
-			d.decodeIncomingData(data.content)
+			d.decodeIncomingData(data.content, data.context)
 		}
 
 	}
@@ -110,15 +100,15 @@ func (d *Decoder) ackIncomingData() {
 }
 
 // ackEndIncomingData starts the timer which flushes the multi-line buffer
-func (d *Decoder) ackEndIncomingData() {
+func (d *Decoder) ackEndIncomingData(context PayloadContext) {
 	d.timer = time.AfterFunc(countDownDuration, func() {
-		d.sendMessage()
+		d.sendMessage(context)
 	})
 }
 
 // decodeIncomingData splits raw data based on `\n`, creates and processes new lines
 // returns true if inBuf ends with `\n`
-func (d *Decoder) decodeIncomingData(inBuf []byte) (endsWithEOL bool) {
+func (d *Decoder) decodeIncomingData(inBuf []byte, context PayloadContext) (endsWithEOL bool) {
 	i, j := 0, 0
 	n := len(inBuf)
 	maxj := i + maxMessageLen - d.lineBuffer.Len()
@@ -127,12 +117,12 @@ func (d *Decoder) decodeIncomingData(inBuf []byte) (endsWithEOL bool) {
 		if j == maxj {
 			// process the line as it is too long
 			d.lineBuffer.Write(inBuf[i:j])
-			d.processLine()
+			d.processLine(context)
 			i = j
 			maxj = i + maxMessageLen
 		} else if inBuf[j] == '\n' {
 			d.lineBuffer.Write(inBuf[i:j])
-			d.processLine()
+			d.processLine(context)
 			i = j + 1 // +1 as we skip the `\n`
 			maxj = i + maxMessageLen
 		}
@@ -147,61 +137,75 @@ func (d *Decoder) decodeIncomingData(inBuf []byte) (endsWithEOL bool) {
 }
 
 // processLine appends new line to the message, sends and truncates messages
-func (d *Decoder) processLine() {
+func (d *Decoder) processLine(context PayloadContext) {
 	line := d.lineBuffer.Bytes()
 	defer d.lineBuffer.Reset()
 
 	isLineAdded := false
 	if d.isMultiLineEnabled() {
 		if d.lineRe.Match(line) {
-			d.sendMessage()
+			d.sendMessage(context)
 		}
-		isLineAdded = d.appendLine(line)
+		isLineAdded = d.appendLine(line, context)
 	} else {
-		isLineAdded = d.appendLine(line)
+		isLineAdded = d.appendLine(line, context)
 		if isLineAdded {
-			d.sendMessage()
+			d.sendMessage(context)
 		}
 	}
 	if !isLineAdded {
-		d.truncateAndSendMessage(line)
+		d.truncateAndSendMessage(line, context)
 	}
 }
 
 // appendLine attemps to add the new line to the message if there is enough space in msgBuf
 // returns true if the line is added to the message
-func (d *Decoder) appendLine(line []byte) bool {
+func (d *Decoder) appendLine(line []byte, context PayloadContext) bool {
 	maxLineLen := maxMessageLen - d.msgBuffer.Len()
 	if len(line) < maxLineLen {
 		if d.msgBuffer.Len() != 0 {
 			d.msgBuffer.Write([]byte(`\n`))
 		}
 		d.msgBuffer.Write(line)
+		if context != nil {
+			context.update(line)
+			context.update([]byte("\n"))
+		}
 		return true
 	}
 	return false
 }
 
-// truncateAndSendMessage appends the new line to to msgBuf and sends the message
+// truncateAndSendMessage appends the new line to msgBuf and sends the message
 // the order of the operations changes for multi-line logs
-func (d *Decoder) truncateAndSendMessage(line []byte) {
+func (d *Decoder) truncateAndSendMessage(line []byte, context PayloadContext) {
 	if d.isMultiLineEnabled() {
-		d.sendMessage()
+		d.sendMessage(context)
 		d.msgBuffer.Write(line)
+		if context != nil {
+			context.update(line)
+		}
 	} else {
 		d.msgBuffer.Write(line)
-		d.sendMessage()
+		if context != nil {
+			context.update(line)
+		}
+		d.sendMessage(context)
 	}
 }
 
 // sendMessage sends the message and flushes msgBuf
-func (d *Decoder) sendMessage() {
+func (d *Decoder) sendMessage(context PayloadContext) {
 	msg := make([]byte, d.msgBuffer.Len())
 	copy(msg, d.msgBuffer.Bytes())
 	defer d.msgBuffer.Reset()
 
 	if len(msg) > 0 {
 		m := message.NewMessage(msg)
+		if context != nil {
+			o := context.messageOrigin()
+			m.SetOrigin(o)
+		}
 		d.OutputChan <- m
 	}
 }
