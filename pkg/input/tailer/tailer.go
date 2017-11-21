@@ -50,7 +50,7 @@ func NewTailer(outputChan chan message.Message, source *config.IntegrationConfig
 	return &Tailer{
 		path:       source.Path,
 		outputChan: outputChan,
-		d:          decoder.InitializedDecoder(),
+		d:          decoder.InitializeDecoder(source),
 		source:     source,
 
 		lastOffset:        0,
@@ -192,7 +192,9 @@ func (t *Tailer) readForever() {
 			t.wait()
 			continue
 		}
-		t.d.InputChan <- decoder.NewPayload(inBuf[:n], t.GetLastOffset())
+		offset := t.GetLastOffset()
+		payloadOrigin := decoder.NewFileContext(offset)
+		t.d.InputChan <- decoder.NewPayload(inBuf[:n], payloadOrigin)
 		t.incrementLastOffset(n)
 	}
 }

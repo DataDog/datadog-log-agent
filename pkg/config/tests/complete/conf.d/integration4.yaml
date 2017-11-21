@@ -1,0 +1,12 @@
+init_config:
+
+instances:
+  - whatever: anything
+  
+logs:
+  - type: file
+    path: /var/log/access.log    
+    log_processing_rules:
+      - type: multi_line
+        name: numbers        
+        pattern: "^[0-9]"
