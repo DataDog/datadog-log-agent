@@ -39,13 +39,11 @@ func (anl *AbstractNetworkListener) Start() {
 // forwardMessages lets the AbstractNetworkListener forward log messages to the output channel
 func (anl *AbstractNetworkListener) forwardMessages(d *decoder.Decoder, outputChan chan message.Message) {
 	for msg := range d.OutputChan {
-
-		_, ok := msg.(*message.StopMessage)
-		if ok {
+		if msg.IsStop {
 			return
 		}
 
-		netMsg := message.NewNetworkMessage(msg.Content())
+		netMsg := message.NewNetworkMessage(msg.Content)
 		o := message.NewOrigin()
 		o.LogSource = anl.source
 		netMsg.SetOrigin(o)
@@ -71,6 +69,6 @@ func (anl *AbstractNetworkListener) handleConnection(conn net.Conn) {
 			d.Stop()
 			return
 		}
-		d.InputChan <- decoder.NewPayload(inBuf[:n], nil) // we don't pass an offset for a network message
+		d.InputChan <- decoder.NewPayload(inBuf[:n])
 	}
 }

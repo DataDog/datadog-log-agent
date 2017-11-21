@@ -143,23 +143,21 @@ func (t *Tailer) reset() {
 // forwardMessages lets the Tailer forward log messages to the output channel
 func (t *Tailer) forwardMessages() {
 	for msg := range t.d.OutputChan {
-
-		_, ok := msg.(*message.StopMessage)
-		if ok {
+		if msg.IsStop {
 			return
 		}
 
-		fileMsg := message.NewFileMessage(msg.Content())
-		msgOffset := msg.GetOrigin().Offset
+		fileMsg := message.NewFileMessage(msg.Content)
+		// msgOffset := 0
 		identifier := t.Identifier()
 		if !t.shouldTrackOffset {
-			msgOffset = 0
+			// msgOffset = 0
 			identifier = ""
 		}
 		msgOrigin := message.NewOrigin()
 		msgOrigin.LogSource = t.source
 		msgOrigin.Identifier = identifier
-		msgOrigin.Offset = msgOffset
+		// msgOrigin.Offset = msgOffset
 		fileMsg.SetOrigin(msgOrigin)
 		t.outputChan <- fileMsg
 	}
@@ -192,9 +190,8 @@ func (t *Tailer) readForever() {
 			t.wait()
 			continue
 		}
-		offset := t.GetLastOffset()
-		payloadOrigin := decoder.NewFileContext(offset)
-		t.d.InputChan <- decoder.NewPayload(inBuf[:n], payloadOrigin)
+		// offset := t.GetLastOffset()
+		t.d.InputChan <- decoder.NewPayload(inBuf[:n])
 		t.incrementLastOffset(n)
 	}
 }
