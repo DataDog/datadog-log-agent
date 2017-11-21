@@ -7,6 +7,7 @@ package decoder
 
 import (
 	"bytes"
+	"errors"
 	"regexp"
 	"time"
 
@@ -141,26 +142,26 @@ func (d *Decoder) processLine(context PayloadContext) {
 	line := d.lineBuffer.Bytes()
 	defer d.lineBuffer.Reset()
 
-	isLineAdded := false
+	var appendError error
 	if d.isMultiLineEnabled() {
 		if d.lineRe.Match(line) {
 			d.sendMessage(context)
 		}
-		isLineAdded = d.appendLine(line, context)
+		appendError = d.appendLine(line, context)
 	} else {
-		isLineAdded = d.appendLine(line, context)
-		if isLineAdded {
+		appendError = d.appendLine(line, context)
+		if appendError == nil {
 			d.sendMessage(context)
 		}
 	}
-	if !isLineAdded {
+	if appendError != nil {
 		d.truncateAndSendMessage(line, context)
 	}
 }
 
 // appendLine attemps to add the new line to the message if there is enough space in msgBuf
-// returns true if the line is added to the message
-func (d *Decoder) appendLine(line []byte, context PayloadContext) bool {
+// returns an error if the line could not be added to the message
+func (d *Decoder) appendLine(line []byte, context PayloadContext) error {
 	maxLineLen := maxMessageLen - d.msgBuffer.Len()
 	if len(line) < maxLineLen {
 		if d.msgBuffer.Len() != 0 {
@@ -171,9 +172,9 @@ func (d *Decoder) appendLine(line []byte, context PayloadContext) bool {
 			context.update(line)
 			context.update([]byte("\n"))
 		}
-		return true
+		return nil
 	}
-	return false
+	return errors.New("could not append new line to msgBuf, not enough space left")
 }
 
 // truncateAndSendMessage appends the new line to msgBuf and sends the message

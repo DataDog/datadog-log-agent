@@ -7,6 +7,7 @@ package config
 
 import (
 	"path/filepath"
+	// "regexp"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -15,7 +16,7 @@ import (
 
 func TestAvailableIntegrationConfigs(t *testing.T) {
 	ddconfdPath := filepath.Join(testsPath, "complete", "conf.d")
-	assert.Equal(t, []string{"integration", "integration2", "integration3"}, availableIntegrationConfigs(ddconfdPath))
+	assert.Equal(t, []string{"integration", "integration2", "integration3", "integration4"}, availableIntegrationConfigs(ddconfdPath))
 	ddconfdPath = filepath.Join(testsPath, "complete5", "conf.d")
 	assert.Equal(t, []string{"integration"}, availableIntegrationConfigs(ddconfdPath))
 }
@@ -26,7 +27,7 @@ func TestBuildLogsAgentIntegrationsConfigs(t *testing.T) {
 	buildLogsAgentIntegrationsConfig(testConfig, ddconfdPath)
 
 	rules := getLogsSources(testConfig)
-	assert.Equal(t, 3, len(rules))
+	assert.Equal(t, 4, len(rules))
 	assert.Equal(t, "file", rules[0].Type)
 	assert.Equal(t, "/var/log/access.log", rules[0].Path)
 	assert.Equal(t, "nginx", rules[0].Service)
@@ -46,6 +47,9 @@ func TestBuildLogsAgentIntegrationsConfigs(t *testing.T) {
 	assert.Equal(t, "docker", rules[2].Type)
 	assert.Equal(t, "test", rules[2].Image)
 
+	assert.Equal(t, "file", rules[3].Type)
+	assert.Equal(t, "/var/log/access.log", rules[3].Path)
+
 	// processing
 	assert.Equal(t, 0, len(rules[0].ProcessingRules))
 	assert.Equal(t, 1, len(rules[1].ProcessingRules))
@@ -55,6 +59,14 @@ func TestBuildLogsAgentIntegrationsConfigs(t *testing.T) {
 	assert.Equal(t, "[mocked]", pRule.ReplacePlaceholder)
 	assert.Equal(t, []byte("[mocked]"), pRule.ReplacePlaceholderBytes)
 	assert.Equal(t, ".*", pRule.Pattern)
+
+	assert.Equal(t, 1, len(rules[3].ProcessingRules))
+	mRule := rules[3].ProcessingRules[0]
+	assert.Equal(t, "multi_line", mRule.Type)
+	assert.Equal(t, "numbers", mRule.Name)
+	re := mRule.Reg
+	assert.True(t, re.MatchString("123"))
+	assert.False(t, re.MatchString("a123"))
 }
 
 func TestBuildTagsPayload(t *testing.T) {
