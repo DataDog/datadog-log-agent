@@ -37,38 +37,40 @@ func newSingleLineMessageProducer(outputChan chan *Message) *singleLineMessagePr
 }
 
 // Consume checks line and the inner state of the producer to emit new messages
-func (p singleLineMessageProducer) Consume(line []byte) {
-	if len(line) == 0 {
+func (p *singleLineMessageProducer) Consume(line []byte) {
+	lineLen := len(line)
+	if lineLen == 0 {
 		return
 	}
 	var msg *Message
-	if len(line) < maxMessageLen {
-		msg = newMessage(line, p.isMsgTrunc)
+	if lineLen < maxMessageLen {
+		msg = newMessage(line, p.isMsgTrunc, lineLen+1) // add 1 for `\n`
 		p.isMsgTrunc = false
 	} else {
-		msg = newMessage(line, true)
+		msg = newMessage(line, true, lineLen)
 		p.isMsgTrunc = true
 	}
 	p.outputChan <- msg
 }
 
 // Prepare is not needed for single line messages
-func (p singleLineMessageProducer) Prepare() {
+func (p *singleLineMessageProducer) Prepare() {
 	// not implemented
 }
 
 // Dispose is not needed for single line messages
-func (p singleLineMessageProducer) Dispose() {
+func (p *singleLineMessageProducer) Dispose() {
 	// not implemented
 }
 
 // multiLineMessageProducer emits new multi-line messages
 type multiLineMessageProducer struct {
-	outputChan     chan *Message
-	contentBuffer  *bytes.Buffer
-	newLineRe      *regexp.Regexp
-	isContentTrunc bool
-	timer          *time.Timer
+	outputChan      chan *Message
+	contentBuffer   *bytes.Buffer
+	newLineRe       *regexp.Regexp
+	isContentTrunc  bool
+	charactersCount int
+	timer           *time.Timer
 }
 
 // newMultiLineMessageProducer returns a new newMultiLineMessageProducer
@@ -82,21 +84,21 @@ func newMultiLineMessageProducer(outputChan chan *Message, newLineRe *regexp.Reg
 }
 
 // Prepare stops the timer that sends the content in buffer
-func (p multiLineMessageProducer) Prepare() {
+func (p *multiLineMessageProducer) Prepare() {
 	if p.timer != nil {
 		p.timer.Stop()
 	}
 }
 
 // Dispose starts the timer that sends the content in buffer
-func (p multiLineMessageProducer) Dispose() {
+func (p *multiLineMessageProducer) Dispose() {
 	p.timer = time.AfterFunc(countDownDuration, func() {
 		p.sendMessage()
 	})
 }
 
 // Consume appends new line to the content in buffer or sends or truncates the content
-func (p multiLineMessageProducer) Consume(line []byte) {
+func (p *multiLineMessageProducer) Consume(line []byte) {
 	var appendError error
 	if p.newLineRe.Match(line) {
 		p.sendMessage()
@@ -111,37 +113,50 @@ func (p multiLineMessageProducer) Consume(line []byte) {
 
 // appendLine attemps to add the new line to the content in buffer if there is enough space
 // returns an error if the line could not be added
-func (p multiLineMessageProducer) appendLine(line []byte) error {
+func (p *multiLineMessageProducer) appendLine(line []byte) error {
+	lineLen := len(line)
 	maxLineLen := maxMessageLen - p.contentBuffer.Len()
-	if len(line) < maxLineLen {
+	if lineLen < maxLineLen {
 		if p.contentBuffer.Len() != 0 {
 			p.contentBuffer.Write([]byte(`\n`))
 		}
 		p.contentBuffer.Write(line)
+		p.charactersCount += lineLen + 1 // add 1 for '\n'
 		return nil
 	}
 	return errors.New("could not append new line, not enough space left")
 }
 
 // truncateMessage sends the content in buffer and keeps the new line in buffer
-func (p multiLineMessageProducer) truncateMessage(line []byte) {
+func (p *multiLineMessageProducer) truncateMessage(line []byte) {
 	p.isContentTrunc = true
 	p.sendMessage()
 	p.isContentTrunc = true
 	p.contentBuffer.Write(line)
+	lineLen := len(line)
+	if lineLen < maxMessageLen {
+		p.charactersCount += lineLen + 1 // add 1 for '\n'
+	} else {
+		p.charactersCount += lineLen
+	}
 }
 
 // sendMessage sends the content in buffer and flushes the buffer
-func (p multiLineMessageProducer) sendMessage() {
+func (p *multiLineMessageProducer) sendMessage() {
 	content := make([]byte, p.contentBuffer.Len())
 	copy(content, p.contentBuffer.Bytes())
 
 	if len(content) > 0 {
 		isTruncated := p.isContentTrunc
-		msg := newMessage(content, isTruncated)
+		msg := newMessage(content, isTruncated, p.charactersCount)
 		p.outputChan <- msg
 	}
+	p.reset()
+}
 
-	p.isContentTrunc = false
+// reset clears the context to process new messages
+func (p *multiLineMessageProducer) reset() {
+	p.charactersCount = 0
 	p.contentBuffer.Reset()
+	p.isContentTrunc = false
 }

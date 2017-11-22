@@ -26,16 +26,18 @@ func NewPayload(content []byte) *Payload {
 
 // Message represents a list of bytes produced by the Decoder
 type Message struct {
-	Content     []byte
-	IsTruncated bool
-	IsStop      bool
+	Content            []byte
+	IsTruncated        bool
+	NumberOfCharacters int
+	IsStop             bool
 }
 
 // // NewPayload returns a new decoder message
-func newMessage(content []byte, isTruncated bool) *Message {
+func newMessage(content []byte, isTruncated bool, numberOfCharacters int) *Message {
 	return &Message{
-		Content:     content,
-		IsTruncated: isTruncated,
+		Content:            content,
+		IsTruncated:        isTruncated,
+		NumberOfCharacters: numberOfCharacters,
 	}
 }
 
