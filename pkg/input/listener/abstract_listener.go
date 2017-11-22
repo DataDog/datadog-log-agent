@@ -43,7 +43,7 @@ func (anl *AbstractNetworkListener) forwardMessages(d *decoder.Decoder, outputCh
 			return
 		}
 
-		netMsg := message.NewNetworkMessage(msg.Content)
+		netMsg := message.NewNetworkMessage(msg.Content, msg.IsTruncated)
 		o := message.NewOrigin()
 		o.LogSource = anl.source
 		netMsg.SetOrigin(o)

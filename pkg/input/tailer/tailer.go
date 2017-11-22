@@ -147,7 +147,7 @@ func (t *Tailer) forwardMessages() {
 			return
 		}
 
-		fileMsg := message.NewFileMessage(msg.Content)
+		fileMsg := message.NewFileMessage(msg.Content, msg.IsTruncated)
 		// msgOffset := 0
 		identifier := t.Identifier()
 		if !t.shouldTrackOffset {

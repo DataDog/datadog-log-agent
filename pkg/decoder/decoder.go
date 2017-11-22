@@ -12,7 +12,7 @@ import (
 )
 
 // maxMessageLen represents the maximum length for a message
-var maxMessageLen = config.MaxMessageLen
+var maxMessageLen = config.MaxMessageLen - len([]byte(config.TruncWarningMsg))
 
 // Payload represents a list of bytes consumed by the Decoder
 type Payload struct {

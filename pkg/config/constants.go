@@ -9,6 +9,9 @@ const (
 	// MaxMessageLen is the maximum length for any message we send to the intake
 	MaxMessageLen = 1 * 1000 * 1000
 
+	// TruncWarningMsg is the warning we put in front of the message when it is too long
+	TruncWarningMsg = "...TRUNCATED..."
+
 	ChanSizes         = 100
 	NumberOfPipelines = int32(4)
 )

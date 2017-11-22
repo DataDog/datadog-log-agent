@@ -155,7 +155,7 @@ func (dt *DockerTailer) forwardMessages() {
 
 		ts, updatedMsg := dt.updatedDockerMessage(msg.Content)
 
-		containerMsg := message.NewContainerMessage(updatedMsg)
+		containerMsg := message.NewContainerMessage(updatedMsg, msg.IsTruncated)
 		msgOrigin := message.NewOrigin()
 		msgOrigin.LogSource = dt.source
 		msgOrigin.Timestamp = ts
