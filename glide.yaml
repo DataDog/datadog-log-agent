@@ -13,10 +13,11 @@ import:
   subpackages:
    - api
 - package: github.com/DataDog/datadog-agent
-  version: ~6.0.0-beta.2
+  version: ed9ebe7d72e2b5d176153f922e306453935175dc
   subpackages:
   - pkg/tagger
   - pkg/util/docker
+  - pkg/config
 testImport:
 - package: github.com/stretchr/testify
   subpackages:

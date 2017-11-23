@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/DataDog/datadog-agent/pkg/tagger"
-	dockerutil "github.com/DataDog/datadog-agent/pkg/util/docker"
 
 	"github.com/DataDog/datadog-log-agent/pkg/auditor"
 	"github.com/DataDog/datadog-log-agent/pkg/config"
@@ -141,10 +140,6 @@ func (c *ContainerInput) setup() error {
 	if err != nil {
 		log.Println(err)
 	}
-	dockerutil.InitDockerUtil(&dockerutil.Config{
-		CacheDuration:  10 * time.Second,
-		CollectNetwork: false,
-	})
 
 	// Start tailing monitored containers
 	c.scan(false)
