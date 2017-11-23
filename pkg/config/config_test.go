@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	ddconfig "github.com/DataDog/datadog-agent/pkg/config"
 	"github.com/DataDog/datadog-agent/pkg/util"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -20,7 +21,6 @@ func TestBuildConfigWithCompleteFile(t *testing.T) {
 	var testConfig = viper.New()
 	ddconfigPath := filepath.Join(testsPath, "complete", "datadog.yaml")
 	ddconfdPath := filepath.Join(testsPath, "complete", "conf.d")
-	assert.Equal(t, false, isRunningOnAgent5(ddconfigPath))
 	buildMainConfig(testConfig, ddconfigPath, ddconfdPath)
 	assert.Equal(t, "helloworld", testConfig.GetString("api_key"))
 	assert.Equal(t, "my.host", testConfig.GetString("hostname"))
@@ -31,33 +31,17 @@ func TestBuildConfigWithCompleteFile(t *testing.T) {
 	assert.Equal(t, true, testConfig.GetBool("log_enabled"))
 }
 
-func TestBuildConfigWithCompleteFileAgent5(t *testing.T) {
-	var testConfig = viper.New()
-	ddconfigPath := filepath.Join(testsPath, "complete5", "datadog.conf")
-	ddconfdPath := filepath.Join(testsPath, "complete5", "conf.d")
-	assert.Equal(t, true, isRunningOnAgent5(ddconfigPath))
-	buildMainConfig(testConfig, ddconfigPath, ddconfdPath)
-	assert.Equal(t, "helloworld", testConfig.GetString("api_key"))
-	assert.Equal(t, "my.host", testConfig.GetString("hostname"))
-	assert.Equal(t, "playground", testConfig.GetString("logset"))
-	assert.Equal(t, "my.url", testConfig.GetString("log_dd_url"))
-	assert.Equal(t, 10516, testConfig.GetInt("log_dd_port"))
-	assert.Equal(t, true, testConfig.GetBool("skip_ssl_validation"))
-	assert.Equal(t, true, testConfig.GetBool("log_enabled"))
-}
-
-func TestBuildConfigWithIncompleteFile(t *testing.T) {
-	var testConfig = viper.New()
+func TestDDConfigDefaultValues(t *testing.T) {
+	assert.Equal(t, "", ddconfig.Datadog.GetString("logset"))
+	assert.Equal(t, "intake.logs.datadoghq.com", ddconfig.Datadog.GetString("log_dd_url"))
+	assert.Equal(t, 10516, ddconfig.Datadog.GetInt("log_dd_port"))
+	assert.Equal(t, false, ddconfig.Datadog.GetBool("skip_ssl_validation"))
+	assert.Equal(t, false, ddconfig.Datadog.GetBool("log_enabled"))
+	hostname, _ := util.GetHostname()
 	ddconfigPath := filepath.Join(testsPath, "incomplete", "datadog.yaml")
 	ddconfdPath := filepath.Join(testsPath, "incomplete", "conf.d")
-	buildMainConfig(testConfig, ddconfigPath, ddconfdPath)
-	assert.Equal(t, "", testConfig.GetString("logset"))
-	assert.Equal(t, "intake.logs.datadoghq.com", testConfig.GetString("log_dd_url"))
-	assert.Equal(t, 10516, testConfig.GetInt("log_dd_port"))
-	assert.Equal(t, false, testConfig.GetBool("skip_ssl_validation"))
-	assert.Equal(t, false, testConfig.GetBool("log_enabled"))
-	hostname, _ := util.GetHostname()
-	assert.Equal(t, hostname, testConfig.GetString("hostname"))
+	buildMainConfig(ddconfig.Datadog, ddconfigPath, ddconfdPath)
+	assert.Equal(t, hostname, ddconfig.Datadog.GetString("hostname"))
 }
 
 func TestComputeConfigWithMisconfiguredFile(t *testing.T) {
