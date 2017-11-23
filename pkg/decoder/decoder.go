@@ -97,25 +97,12 @@ func (d *Decoder) Stop() {
 
 // run lets the Decoder handle data coming from the InputChan
 func (d *Decoder) run() {
+	d.msgProducer.Start()
 	for data := range d.InputChan {
-		d.ackIncomingData(data.content)
 		d.decodeIncomingData(data.content)
-		d.ackEndIncomingData(data.content)
 	}
+	d.msgProducer.Stop()
 	d.OutputChan <- newMessageStop()
-}
-
-// ackIncomingData prepares msgProducer to receive new line
-func (d *Decoder) ackIncomingData(inBuf []byte) {
-	d.msgProducer.Prepare()
-}
-
-// ackEndIncomingData prepares msgProducer to stop receiveing new line
-func (d *Decoder) ackEndIncomingData(inBuf []byte) {
-	lastIndex := len(inBuf) - 1
-	if lastIndex >= 0 && inBuf[lastIndex] == '\n' {
-		d.msgProducer.Dispose()
-	}
 }
 
 // decodeIncomingData splits raw data based on `\n`, creates and processes new lines

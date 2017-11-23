@@ -9,18 +9,16 @@ import (
 	"bytes"
 	"errors"
 	"regexp"
+	"sync"
 	"time"
 )
-
-// countDownDuration represents the time after which the buffered message is sent
-const countDownDuration = 1 * time.Second
 
 // messageProducer consumes new lines to compute and emit messages
 // Prepare and Dispose can be used for special needs
 type messageProducer interface {
+	Start()
+	Stop()
 	Consume(line []byte)
-	Prepare()
-	Dispose()
 }
 
 // singleLineMessageProducer emits new messages whenever it receives new lines
@@ -34,6 +32,16 @@ func newSingleLineMessageProducer(outputChan chan *Message) *singleLineMessagePr
 	return &singleLineMessageProducer{
 		outputChan: outputChan,
 	}
+}
+
+// Start is not needed for single line messages
+func (p *singleLineMessageProducer) Start() {
+	// not implemented
+}
+
+// Stop is not needed for single line messages
+func (p *singleLineMessageProducer) Stop() {
+	// not implemented
 }
 
 // Consume checks line and the inner state of the producer to emit new messages
@@ -53,52 +61,53 @@ func (p *singleLineMessageProducer) Consume(line []byte) {
 	p.outputChan <- msg
 }
 
-// Prepare is not needed for single line messages
-func (p *singleLineMessageProducer) Prepare() {
-	// not implemented
-}
-
-// Dispose is not needed for single line messages
-func (p *singleLineMessageProducer) Dispose() {
-	// not implemented
-}
+// outdatedDuration represents the time after which the buffered message is sent
+const outdatedDuration = 1 * time.Second
 
 // multiLineMessageProducer emits new multi-line messages
 type multiLineMessageProducer struct {
-	outputChan      chan *Message
-	contentBuffer   *bytes.Buffer
-	newLineRe       *regexp.Regexp
+	outputChan    chan *Message
+	contentBuffer *bytes.Buffer
+	newLineRe     *regexp.Regexp
+	timer         *time.Timer
+	consumeMutex  sync.Mutex
+
 	isContentTrunc  bool
 	charactersCount int
-	timer           *time.Timer
 }
 
 // newMultiLineMessageProducer returns a new newMultiLineMessageProducer
 func newMultiLineMessageProducer(outputChan chan *Message, newLineRe *regexp.Regexp) *multiLineMessageProducer {
 	var contentBuffer bytes.Buffer
+	timer := time.NewTimer(outdatedDuration)
 	return &multiLineMessageProducer{
 		outputChan:    outputChan,
 		contentBuffer: &contentBuffer,
 		newLineRe:     newLineRe,
+		timer:         timer,
 	}
 }
 
-// Prepare stops the timer that sends the content in buffer
-func (p *multiLineMessageProducer) Prepare() {
-	if p.timer != nil {
-		p.timer.Stop()
-	}
+// Start consumes timer events to send the content in buffer if it's outdated
+func (p *multiLineMessageProducer) Start() {
+	go func() {
+		for range p.timer.C {
+			p.consumeMutex.Lock()
+			p.sendMessage()
+			p.consumeMutex.Unlock()
+		}
+	}()
 }
 
-// Dispose starts the timer that sends the content in buffer
-func (p *multiLineMessageProducer) Dispose() {
-	p.timer = time.AfterFunc(countDownDuration, func() {
-		p.sendMessage()
-	})
+// Stop stops the timer
+func (p *multiLineMessageProducer) Stop() {
+	p.timer.Stop()
 }
 
 // Consume appends new line to the content in buffer or sends or truncates the content
 func (p *multiLineMessageProducer) Consume(line []byte) {
+	p.consumeMutex.Lock()
+	p.timer.Stop()
 	var appendError error
 	if p.newLineRe.Match(line) {
 		p.sendMessage()
@@ -109,6 +118,8 @@ func (p *multiLineMessageProducer) Consume(line []byte) {
 	if appendError != nil {
 		p.truncateMessage(line)
 	}
+	p.timer.Reset(outdatedDuration)
+	p.consumeMutex.Unlock()
 }
 
 // appendLine attemps to add the new line to the content in buffer if there is enough space
