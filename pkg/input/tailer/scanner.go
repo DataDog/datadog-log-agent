@@ -114,7 +114,7 @@ func (s *Scanner) scan() {
 		}
 
 		if stat1.Size() < tailer.GetLastOffset() {
-			tailer.reset()
+			s.onFileRotation(tailer, source)
 		}
 	}
 }

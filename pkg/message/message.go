@@ -13,6 +13,7 @@ import (
 type Message interface {
 	Content() []byte
 	SetContent([]byte)
+	IsTruncated() bool
 	GetOrigin() *MessageOrigin
 	SetOrigin(*MessageOrigin)
 }
@@ -26,8 +27,9 @@ type MessageOrigin struct {
 }
 
 type message struct {
-	content []byte
-	Origin  *MessageOrigin
+	content     []byte
+	isTruncated bool
+	Origin      *MessageOrigin
 }
 
 // Content returns the content the message, the actual log line
@@ -38,6 +40,11 @@ func (m *message) Content() []byte {
 // SetContent updates the content the message
 func (m *message) SetContent(content []byte) {
 	m.content = content
+}
+
+// IsTruncated returns true if the log is truncated
+func (m *message) IsTruncated() bool {
+	return m.isTruncated
 }
 
 // GetOrigin returns the Origin from which the message comes
@@ -51,9 +58,10 @@ func (m *message) SetOrigin(Origin *MessageOrigin) {
 }
 
 // NewMessage returns a new message
-func NewMessage(content []byte) *message {
+func NewMessage(content []byte, isTruncated bool) *message {
 	return &message{
-		content: content,
+		content:     content,
+		isTruncated: isTruncated,
 	}
 }
 
@@ -69,7 +77,7 @@ type StopMessage struct {
 
 func NewStopMessage() *StopMessage {
 	return &StopMessage{
-		message: NewMessage(nil),
+		message: NewMessage(nil, false),
 	}
 }
 
@@ -78,9 +86,9 @@ type FileMessage struct {
 	*message
 }
 
-func NewFileMessage(content []byte) *FileMessage {
+func NewFileMessage(content []byte, isTruncated bool) *FileMessage {
 	return &FileMessage{
-		message: NewMessage(content),
+		message: NewMessage(content, isTruncated),
 	}
 }
 
@@ -89,9 +97,9 @@ type NetworkMessage struct {
 	*message
 }
 
-func NewNetworkMessage(content []byte) *NetworkMessage {
+func NewNetworkMessage(content []byte, isTruncated bool) *NetworkMessage {
 	return &NetworkMessage{
-		message: NewMessage(content),
+		message: NewMessage(content, isTruncated),
 	}
 }
 
@@ -100,8 +108,8 @@ type ContainerMessage struct {
 	*message
 }
 
-func NewContainerMessage(content []byte) *ContainerMessage {
+func NewContainerMessage(content []byte, isTruncated bool) *ContainerMessage {
 	return &ContainerMessage{
-		message: NewMessage(content),
+		message: NewMessage(content, isTruncated),
 	}
 }

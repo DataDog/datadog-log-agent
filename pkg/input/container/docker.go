@@ -137,7 +137,7 @@ func (dt *DockerTailer) readForever() {
 			dt.wait()
 			continue
 		}
-		dt.d.InputChan <- decoder.NewPayload(inBuf[:n], nil)
+		dt.d.InputChan <- decoder.NewPayload(inBuf[:n])
 	}
 }
 
@@ -149,14 +149,13 @@ func (dt *DockerTailer) readForever() {
 // message before forwarding it
 func (dt *DockerTailer) forwardMessages() {
 	for msg := range dt.d.OutputChan {
-		_, ok := msg.(*message.StopMessage)
-		if ok {
+		if msg.IsStop {
 			return
 		}
 
-		ts, updatedMsg := dt.updatedDockerMessage(msg.Content())
+		ts, updatedMsg := dt.updatedDockerMessage(msg.Content)
 
-		containerMsg := message.NewContainerMessage(updatedMsg)
+		containerMsg := message.NewContainerMessage(updatedMsg, msg.IsTruncated)
 		msgOrigin := message.NewOrigin()
 		msgOrigin.LogSource = dt.source
 		msgOrigin.Timestamp = ts

@@ -29,6 +29,7 @@ type Tailer struct {
 	path string
 	file *os.File
 
+	msgOffset         int64
 	lastOffset        int64
 	shouldTrackOffset bool
 
@@ -117,6 +118,7 @@ func (t *Tailer) startReading(offset int64, whence int) error {
 	ret, _ := f.Seek(offset, whence)
 	t.file = f
 	t.lastOffset = ret
+	t.msgOffset = ret
 
 	go t.readForever()
 	return nil
@@ -128,38 +130,26 @@ func (t *Tailer) tailFromBegining() error {
 	return t.tailFrom(0, os.SEEK_SET)
 }
 
-// tailFromEnd lets the tailer start tailing its file
-// from the end
-func (t *Tailer) tailFromEnd() error {
-	return t.tailFrom(0, os.SEEK_END)
-}
-
-// reset makes the tailer seek the begining of its file
-func (t *Tailer) reset() {
-	t.file.Seek(0, os.SEEK_SET)
-	t.setLastOffset(0)
-}
-
 // forwardMessages lets the Tailer forward log messages to the output channel
 func (t *Tailer) forwardMessages() {
 	for msg := range t.d.OutputChan {
-
-		_, ok := msg.(*message.StopMessage)
-		if ok {
+		if msg.IsStop {
 			return
 		}
 
-		fileMsg := message.NewFileMessage(msg.Content())
-		msgOffset := msg.GetOrigin().Offset
+		fileMsg := message.NewFileMessage(msg.Content, msg.IsTruncated)
+		msgOffset := t.msgOffset + int64(msg.NumberOfCharacters)
+		// log.Println(msgOffset)
 		identifier := t.Identifier()
 		if !t.shouldTrackOffset {
 			msgOffset = 0
 			identifier = ""
 		}
+		t.msgOffset = msgOffset
 		msgOrigin := message.NewOrigin()
 		msgOrigin.LogSource = t.source
 		msgOrigin.Identifier = identifier
-		msgOrigin.Offset = msgOffset
+		msgOrigin.Offset = t.msgOffset
 		fileMsg.SetOrigin(msgOrigin)
 		t.outputChan <- fileMsg
 	}
@@ -192,9 +182,7 @@ func (t *Tailer) readForever() {
 			t.wait()
 			continue
 		}
-		offset := t.GetLastOffset()
-		payloadOrigin := decoder.NewFileContext(offset)
-		t.d.InputChan <- decoder.NewPayload(inBuf[:n], payloadOrigin)
+		t.d.InputChan <- decoder.NewPayload(inBuf[:n])
 		t.incrementLastOffset(n)
 	}
 }
@@ -220,10 +208,6 @@ func (t *Tailer) shouldSoftStop() bool {
 
 func (t *Tailer) incrementLastOffset(n int) {
 	atomic.AddInt64(&t.lastOffset, int64(n))
-}
-
-func (t *Tailer) setLastOffset(n int64) {
-	atomic.StoreInt64(&t.lastOffset, n)
 }
 
 func (t *Tailer) GetLastOffset() int64 {

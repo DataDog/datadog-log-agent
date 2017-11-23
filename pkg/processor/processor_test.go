@@ -33,8 +33,8 @@ func buildTestProcessingRule(ruleType, replacePlaceholder, pattern string, p *Pr
 	return config.IntegrationConfigLogSource{ProcessingRules: []config.LogsProcessingRule{rule}, TagsPayload: []byte{'-'}}
 }
 
-func newNetworkMessage(content []byte, source *config.IntegrationConfigLogSource) message.Message {
-	msg := message.NewNetworkMessage(content)
+func newNetworkMessage(content []byte, isTruncated bool, source *config.IntegrationConfigLogSource) message.Message {
+	msg := message.NewNetworkMessage(content, isTruncated)
 	msgOrigin := message.NewOrigin()
 	msgOrigin.LogSource = source
 	msg.SetOrigin(msgOrigin)
@@ -55,44 +55,56 @@ func TestExclusion(t *testing.T) {
 	var redactedMessage []byte
 
 	source := buildTestProcessingRule("exclude_at_match", "", "world", &p)
-	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("hello"), &source))
+	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("hello"), false, &source))
 	assert.Equal(t, true, shouldProcess)
 	assert.Equal(t, []byte("hello"), redactedMessage)
 
-	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("world"), &source))
+	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("world"), false, &source))
 	assert.Equal(t, false, shouldProcess)
 
-	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("a brand new world"), &source))
+	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("a brand new world"), false, &source))
 	assert.Equal(t, false, shouldProcess)
 
 	source = buildTestProcessingRule("exclude_at_match", "", "$world", &p)
-	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("a brand new world"), &source))
+	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("a brand new world"), false, &source))
 	assert.Equal(t, true, shouldProcess)
 }
 
-func TestRedacting(t *testing.T) {
+func TestMask(t *testing.T) {
 	p := NewTestProcessor()
 	var shouldProcess bool
 	var redactedMessage []byte
 
 	source := buildTestProcessingRule("mask_sequences", "[masked_world]", "world", &p)
-	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("hello"), &source))
+	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("hello"), false, &source))
 	assert.Equal(t, true, shouldProcess)
 	assert.Equal(t, []byte("hello"), redactedMessage)
 
-	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("hello world!"), &source))
+	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("hello world!"), false, &source))
 	assert.Equal(t, true, shouldProcess)
 	assert.Equal(t, []byte("hello [masked_world]!"), redactedMessage)
 
 	source = buildTestProcessingRule("mask_sequences", "[masked_user]", "User=\\w+@datadoghq.com", &p)
-	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("new test launched by User=beats@datadoghq.com on localhost"), &source))
+	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("new test launched by User=beats@datadoghq.com on localhost"), false, &source))
 	assert.Equal(t, true, shouldProcess)
 	assert.Equal(t, []byte("new test launched by [masked_user] on localhost"), redactedMessage)
 
 	source = buildTestProcessingRule("mask_sequences", "[masked_credit_card]", "(?:4[0-9]{12}(?:[0-9]{3})?|[25][1-7][0-9]{14}|6(?:011|5[0-9][0-9])[0-9]{12}|3[47][0-9]{13}|3(?:0[0-5]|[68][0-9])[0-9]{11}|(?:2131|1800|35\\d{3})\\d{11})", &p)
-	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("The credit card 4323124312341234 was used to buy some time"), &source))
+	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("The credit card 4323124312341234 was used to buy some time"), false, &source))
 	assert.Equal(t, true, shouldProcess)
 	assert.Equal(t, []byte("The credit card [masked_credit_card] was used to buy some time"), redactedMessage)
+}
+
+func TestTruncate(t *testing.T) {
+	p := NewTestProcessor()
+	source := config.IntegrationConfigLogSource{}
+	var redactedMessage []byte
+
+	_, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("hello"), false, &source))
+	assert.Equal(t, []byte("hello"), redactedMessage)
+
+	_, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("hello"), true, &source))
+	assert.Equal(t, []byte("...TRUNCATED...hello"), redactedMessage)
 }
 
 func TestComputeExtraContent(t *testing.T) {
@@ -101,7 +113,7 @@ func TestComputeExtraContent(t *testing.T) {
 	var extraContentParts []string
 
 	source := &config.IntegrationConfigLogSource{TagsPayload: []byte{'-'}}
-	extraContent = p.computeExtraContent(newNetworkMessage([]byte("message"), source))
+	extraContent = p.computeExtraContent(newNetworkMessage([]byte("message"), false, source))
 	extraContentParts = strings.Split(string(extraContent), " ")
 	assert.Equal(t, 8, len(extraContentParts))
 	// Pick the date string from the extra content parts and make sure it's within 1mn of the UTC time
@@ -110,7 +122,7 @@ func TestComputeExtraContent(t *testing.T) {
 	assert.Nil(t, err)
 	assert.True(t, math.Abs(time.Now().UTC().Sub(timestamp).Minutes()) < 1)
 
-	extraContent = p.computeExtraContent(newNetworkMessage([]byte("<message"), source))
+	extraContent = p.computeExtraContent(newNetworkMessage([]byte("<message"), false, source))
 	assert.Nil(t, extraContent)
 }
 
@@ -118,10 +130,10 @@ func TestComputeApiKeyString(t *testing.T) {
 	p := New(nil, nil, "hello", "world")
 
 	source := &config.IntegrationConfigLogSource{}
-	extraContent := p.computeApiKeyString(newNetworkMessage(nil, source))
+	extraContent := p.computeApiKeyString(newNetworkMessage(nil, false, source))
 	assert.Equal(t, "hello/world", string(extraContent))
 
 	source = &config.IntegrationConfigLogSource{Logset: "hi"}
-	extraContent = p.computeApiKeyString(newNetworkMessage(nil, source))
+	extraContent = p.computeApiKeyString(newNetworkMessage(nil, false, source))
 	assert.Equal(t, "hello/hi", string(extraContent))
 }

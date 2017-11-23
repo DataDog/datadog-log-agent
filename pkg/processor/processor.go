@@ -109,6 +109,9 @@ func (p *Processor) buildPayload(apikeyString, redactedMessage, extraContent []b
 // and a copy of the message with some fields redacted, depending on config
 func (p *Processor) applyRedactingRules(msg message.Message) (bool, []byte) {
 	content := msg.Content()
+	if msg.IsTruncated() {
+		content = append([]byte(config.TruncWarningMsg), content...)
+	}
 	for _, rule := range msg.GetOrigin().LogSource.ProcessingRules {
 		switch rule.Type {
 		case config.EXCLUDE_AT_MATCH:

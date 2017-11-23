@@ -12,9 +12,11 @@ import (
 )
 
 func TestMessage(t *testing.T) {
-	message := NewMessage([]byte("hello"))
+	message := NewMessage([]byte("hello"), false)
 	assert.Equal(t, "hello", string(message.Content()))
+	assert.Equal(t, false, message.IsTruncated())
 
 	message.SetContent([]byte("world"))
 	assert.Equal(t, "world", string(message.Content()))
+	assert.Equal(t, false, message.IsTruncated())
 }
