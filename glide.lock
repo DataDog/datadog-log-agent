@@ -1,6 +1,34 @@
-hash: a87a56e3a6c1c5bdc6b862946ca8fdc85c55f94b0237cf5dbaae67872c46ac34
-updated: 2017-10-30T14:54:38.425357137Z
+hash: 9dbf67c312d871112acd1351edfaea62944356db0d158cead834bd399d635951
+updated: 2017-11-23T16:25:23.426847674+01:00
 imports:
+- name: github.com/aws/aws-sdk-go
+  version: 9365c0c6f32778b59eb41491629d37721658efb8
+  subpackages:
+  - aws
+  - aws/awserr
+  - aws/awsutil
+  - aws/client
+  - aws/client/metadata
+  - aws/corehandlers
+  - aws/credentials
+  - aws/credentials/ec2rolecreds
+  - aws/credentials/endpointcreds
+  - aws/credentials/stscreds
+  - aws/defaults
+  - aws/ec2metadata
+  - aws/endpoints
+  - aws/request
+  - aws/session
+  - aws/signer/v4
+  - internal/shareddefaults
+  - private/protocol
+  - private/protocol/ec2query
+  - private/protocol/query
+  - private/protocol/query/queryutil
+  - private/protocol/rest
+  - private/protocol/xml/xmlutil
+  - service/ec2
+  - service/sts
 - name: github.com/cihub/seelog
   version: f561c5e57575bb1e0a2167028b7339b3a8d16fb4
   subpackages:
@@ -9,17 +37,24 @@ imports:
   - archive/tar
   - archive/zip
 - name: github.com/DataDog/datadog-agent
-  version: 75d56518b39edaeca5d3674cce4b3d0b8032703c
+  version: ed9ebe7d72e2b5d176153f922e306453935175dc
   subpackages:
+  - pkg/collector/check
   - pkg/config
+  - pkg/diagnose/diagnosis
   - pkg/tagger
   - pkg/tagger/collectors
   - pkg/tagger/utils
+  - pkg/util
   - pkg/util/cache
   - pkg/util/docker
+  - pkg/util/ec2
   - pkg/util/ecs
+  - pkg/util/gce
+  - pkg/util/hostname
   - pkg/util/kubernetes
   - pkg/util/kubernetes/kubelet
+  - pkg/util/retry
   - pkg/version
 - name: github.com/DataDog/datadog-go
   version: a9c7a9896c1847c9cc2b068a2ae68e9d74540a5d
@@ -60,6 +95,8 @@ imports:
   version: 0dadbb0345b35ec7ef35e228dabb8de89a65bf52
 - name: github.com/fsnotify/fsnotify
   version: 629574ca2a5df945712d3079857300b5e4da0236
+- name: github.com/go-ini/ini
+  version: 32e4c1e6bc4e7d0d8451aa6b75200d19e37a536a
 - name: github.com/hashicorp/hcl
   version: 7fa7fff964d035e8a162cce3a164b3ad02ad651b
   subpackages:
@@ -71,6 +108,8 @@ imports:
   - json/parser
   - json/scanner
   - json/token
+- name: github.com/jmespath/go-jmespath
+  version: dd801d4f4ce7ac746e7e7b4489d2fa600b3b096b
 - name: github.com/magiconair/properties
   version: 51463bfca2576e06c62a8504b5c0f06d61312647
 - name: github.com/Microsoft/go-winio
