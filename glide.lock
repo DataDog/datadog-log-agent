@@ -1,5 +1,5 @@
-hash: 9dbf67c312d871112acd1351edfaea62944356db0d158cead834bd399d635951
-updated: 2017-11-23T16:25:23.426847674+01:00
+hash: 8f768b340df56d1924bf074d99d7f352c48816b9c21af6700b24a9a6c955186c
+updated: 2017-11-27T11:02:21.539677248+01:00
 imports:
 - name: github.com/aws/aws-sdk-go
   version: 9365c0c6f32778b59eb41491629d37721658efb8
@@ -37,7 +37,7 @@ imports:
   - archive/tar
   - archive/zip
 - name: github.com/DataDog/datadog-agent
-  version: ed9ebe7d72e2b5d176153f922e306453935175dc
+  version: 92733ff01547103d5286afc9e272d501cb18f761
   subpackages:
   - pkg/collector/check
   - pkg/config
