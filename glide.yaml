@@ -13,7 +13,7 @@ import:
   subpackages:
    - api
 - package: github.com/DataDog/datadog-agent
-  version: ed9ebe7d72e2b5d176153f922e306453935175dc
+  version: 92733ff01547103d5286afc9e272d501cb18f761
   subpackages:
   - pkg/tagger
   - pkg/util/docker
