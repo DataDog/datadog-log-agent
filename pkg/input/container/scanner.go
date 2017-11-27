@@ -70,16 +70,26 @@ func (c *ContainerInput) run() {
 }
 
 // scan checks for new containers we're expected to
-// tail, as well as stopped containers
+// tail, as well as stopped containers or containers that
+// restarted
 func (c *ContainerInput) scan(tailFromBegining bool) {
 	runningContainers := c.listContainers()
 	containersToMonitor := make(map[string]bool)
 
-	// list containers to monitor
+	// monitor new containers, and restart tailers if needed
 	for _, container := range runningContainers {
 		for _, source := range c.sources {
 			if c.sourceShouldMonitorContainer(source, container) {
 				containersToMonitor[container.ID] = true
+
+				tailer, isTailed := c.tailers[container.ID]
+				if isTailed && tailer.shouldStop {
+					c.stopTailer(tailer)
+					isTailed = false
+				}
+				if !isTailed {
+					c.setupTailer(c.cli, container, source, tailFromBegining, c.pp.NextPipelineChan())
+				}
 			}
 		}
 	}
@@ -87,23 +97,16 @@ func (c *ContainerInput) scan(tailFromBegining bool) {
 	// stop old containers
 	for containerId, tailer := range c.tailers {
 		_, shouldMonitor := containersToMonitor[containerId]
-		if !shouldMonitor || tailer.shouldStop {
-			log.Println("Stop tailing container", c.HumanReadableContainerId(containerId))
-			tailer.Stop()
-			delete(c.tailers, containerId)
+		if !shouldMonitor {
+			c.stopTailer(tailer)
 		}
 	}
+}
 
-	// monitor new containers
-	for _, container := range runningContainers {
-		for _, source := range c.sources {
-			if _, ok := c.tailers[container.ID]; !ok {
-				if c.sourceShouldMonitorContainer(source, container) {
-					c.setupTailer(c.cli, container, source, tailFromBegining, c.pp.NextPipelineChan())
-				}
-			}
-		}
-	}
+func (c *ContainerInput) stopTailer(tailer *DockerTailer) {
+	log.Println("Stop tailing container", c.HumanReadableContainerId(tailer.containerName))
+	tailer.Stop()
+	delete(c.tailers, tailer.containerName)
 }
 
 func (c *ContainerInput) listContainers() []types.Container {
