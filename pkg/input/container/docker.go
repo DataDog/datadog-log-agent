@@ -33,7 +33,7 @@ const tagsUpdatePeriod = 10 * time.Second
 // With docker api, there is no way to know if a log comes from strout or stderr
 // so if we want to capture the severity, we need to tail both in two goroutines
 type DockerTailer struct {
-	containerName string
+	containerId   string
 	outputChan    chan message.Message
 	d             *decoder.Decoder
 	reader        io.ReadCloser
@@ -49,11 +49,11 @@ type DockerTailer struct {
 // NewDockerTailer returns a new DockerTailer
 func NewDockerTailer(cli *client.Client, container types.Container, source *config.IntegrationConfigLogSource, outputChan chan message.Message) *DockerTailer {
 	return &DockerTailer{
-		containerName: container.ID,
-		outputChan:    outputChan,
-		d:             decoder.InitializedDecoder(),
-		source:        source,
-		cli:           cli,
+		containerId: container.ID,
+		outputChan:  outputChan,
+		d:           decoder.InitializedDecoder(),
+		source:      source,
+		cli:         cli,
 
 		sleepDuration: defaultSleepDuration,
 	}
@@ -61,7 +61,7 @@ func NewDockerTailer(cli *client.Client, container types.Container, source *conf
 
 // Identifier returns a string that uniquely identifies a source
 func (dt *DockerTailer) Identifier() string {
-	return fmt.Sprintf("docker:%s", dt.containerName)
+	return fmt.Sprintf("docker:%s", dt.containerId)
 }
 
 // Stop stops the DockerTailer
@@ -123,7 +123,7 @@ func (dt *DockerTailer) startReading(from string) error {
 		Details:    false,
 		Since:      from,
 	}
-	reader, err := dt.cli.ContainerLogs(context.Background(), dt.containerName, options)
+	reader, err := dt.cli.ContainerLogs(context.Background(), dt.containerId, options)
 	if err != nil {
 		return err
 	}
@@ -202,7 +202,7 @@ func (dt *DockerTailer) keepDockerTagsUpdated() {
 }
 
 func (dt *DockerTailer) checkForNewDockerTags() {
-	tags, err := tagger.Tag(dockerutil.ContainerIDToEntityName(dt.containerName), true)
+	tags, err := tagger.Tag(dockerutil.ContainerIDToEntityName(dt.containerId), true)
 	if err != nil {
 		log.Println(err)
 	} else {

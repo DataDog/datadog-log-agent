@@ -104,9 +104,9 @@ func (c *ContainerInput) scan(tailFromBegining bool) {
 }
 
 func (c *ContainerInput) stopTailer(tailer *DockerTailer) {
-	log.Println("Stop tailing container", c.HumanReadableContainerId(tailer.containerName))
+	log.Println("Stop tailing container", c.HumanReadableContainerId(tailer.containerId))
 	tailer.Stop()
-	delete(c.tailers, tailer.containerName)
+	delete(c.tailers, tailer.containerId)
 }
 
 func (c *ContainerInput) listContainers() []types.Container {
