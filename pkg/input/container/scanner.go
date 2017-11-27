@@ -88,7 +88,7 @@ func (c *ContainerInput) scan(tailFromBegining bool) {
 	for containerId, tailer := range c.tailers {
 		_, shouldMonitor := containersToMonitor[containerId]
 		if !shouldMonitor || tailer.shouldStop {
-			log.Println("Stop tailing container", containerId[:12])
+			log.Println("Stop tailing container", c.HumanReadableContainerId(containerId))
 			tailer.Stop()
 			delete(c.tailers, containerId)
 		}
@@ -157,7 +157,7 @@ func (c *ContainerInput) setup() error {
 
 // setupTailer sets one tailer, making it tail from the begining or the end
 func (c *ContainerInput) setupTailer(cli *client.Client, container types.Container, source *config.IntegrationConfigLogSource, tailFromBegining bool, outputChan chan message.Message) {
-	log.Println("Detected container", container.Image, "-", container.ID[:12])
+	log.Println("Detected container", container.Image, "-", c.HumanReadableContainerId(container.ID))
 	t := NewDockerTailer(cli, container, source, outputChan)
 	var err error
 	if tailFromBegining {
@@ -176,4 +176,8 @@ func (c *ContainerInput) Stop() {
 	for _, t := range c.tailers {
 		t.Stop()
 	}
+}
+
+func (c *ContainerInput) HumanReadableContainerId(containerId string) string {
+	return containerId[:12]
 }
