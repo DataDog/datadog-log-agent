@@ -146,7 +146,9 @@ func (dt *DockerTailer) readForever() {
 		inBuf := make([]byte, 4096)
 		n, err := dt.reader.Read(inBuf)
 		if err == io.EOF {
-			dt.wait()
+			// reader is closed, maybe container stopped running
+			// let's close tailer. Scanner will reopen if needed
+			dt.shouldStop = true
 			continue
 		}
 		if err != nil {
