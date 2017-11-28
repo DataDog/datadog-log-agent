@@ -24,6 +24,8 @@ const (
 	MASK_SEQUENCES   = "mask_sequences"
 )
 
+const INTEGRATION_CONFIG_EXTENTION = ".yaml"
+
 // LogsProcessingRule defines an exclusion or a masking rule to
 // be applied on log lines
 type LogsProcessingRule struct {
@@ -77,14 +79,13 @@ func BuildLogsAgentIntegrationsConfigs(ddconfdPath string) error {
 
 func buildLogsAgentIntegrationsConfig(config *viper.Viper, ddconfdPath string) error {
 
-	integrationConfigYamlFiles := availableIntegrationConfigs(ddconfdPath)
+	integrationConfigFiles := availableIntegrationConfigs(ddconfdPath)
 	logsSourceConfigs := []*IntegrationConfigLogSource{}
 
-	for _, file := range integrationConfigYamlFiles {
+	for _, file := range integrationConfigFiles {
 		var integrationConfig IntegrationConfig
 		var viperCfg = viper.New()
-		viperCfg.SetConfigName(file)
-		viperCfg.AddConfigPath(ddconfdPath)
+		viperCfg.SetConfigFile(filepath.Join(ddconfdPath, file))
 		err := viperCfg.ReadInConfig()
 		if err != nil {
 			return err
@@ -118,14 +119,28 @@ func buildLogsAgentIntegrationsConfig(config *viper.Viper, ddconfdPath string) e
 
 // availableIntegrationConfigs lists yaml files in ddconfdPath
 func availableIntegrationConfigs(ddconfdPath string) []string {
+	integrationConfigFiles := integrationConfigsFromDirectory(ddconfdPath, ".")
+	dirs, _ := ioutil.ReadDir(ddconfdPath)
+	for _, d := range dirs {
+		if d.IsDir() {
+			integrationConfigFiles = append(
+				integrationConfigFiles,
+				integrationConfigsFromDirectory(filepath.Join(ddconfdPath, d.Name()), d.Name())...,
+			)
+		}
+	}
+	return integrationConfigFiles
+}
+
+// integrationConfigsFromDirectory returns a list of yaml files in a directory
+func integrationConfigsFromDirectory(dir string, prefix string) []string {
 	var integrationConfigFiles []string
-	files, _ := ioutil.ReadDir(ddconfdPath)
+	files, _ := ioutil.ReadDir(dir)
 	for _, f := range files {
-		var filename = f.Name()
-		var extension = filepath.Ext(filename)
-		var name = filename[0 : len(filename)-len(extension)]
-		if extension == ".yaml" && name != DeprecatedConfig {
-			integrationConfigFiles = append(integrationConfigFiles, name)
+		if !f.IsDir() {
+			if filepath.Ext(f.Name()) == INTEGRATION_CONFIG_EXTENTION {
+				integrationConfigFiles = append(integrationConfigFiles, filepath.Join(prefix, f.Name()))
+			}
 		}
 	}
 	return integrationConfigFiles
