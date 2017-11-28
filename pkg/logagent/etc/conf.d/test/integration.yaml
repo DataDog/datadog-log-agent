@@ -1,0 +1,31 @@
+init_config:
+
+instances:
+  - whatever: anything
+
+logs:
+  - type: file
+    path: /home/vagrant/logrotate/tail.log
+    service: custom
+    source: custom
+    tags: env:demo,test
+
+  - type: tcp
+    source: tcp
+    port: 10514
+
+  - type: udp
+    source: udp
+    port: 10515
+
+  - type: docker
+    # label: com.tristan
+    source: docker
+    service: dock
+    tags: test:tristan
+
+  - type: docker
+    # image: myapp
+    source: docker
+    service: dock2
+    tags: test:tristan

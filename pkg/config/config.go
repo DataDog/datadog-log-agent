@@ -15,7 +15,6 @@ import (
 
 // MainConfig is the name of the main config file, while we haven't merged in dd agent
 const MainConfig = "datadog"
-const DeprecatedConfig = "logs-agent"
 
 // LogsAgent is the global configuration object
 var LogsAgent = ddconfig.Datadog
