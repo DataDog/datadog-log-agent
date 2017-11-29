@@ -8,6 +8,7 @@ package container
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -28,6 +29,11 @@ import (
 
 const defaultSleepDuration = 1 * time.Second
 const tagsUpdatePeriod = 10 * time.Second
+
+// Length of the docker message header.
+// See https://godoc.org/github.com/moby/moby/client#Client.ContainerLogs:
+// [8]byte{STREAM_TYPE, 0, 0, 0, SIZE1, SIZE2, SIZE3, SIZE4}[]byte{OUTPUT}
+const messageHeaderLength = 8
 
 // DockerTailer tails logs coming from stdout and stderr of a docker container
 // With docker api, there is no way to know if a log comes from strout or stderr
@@ -176,7 +182,11 @@ func (dt *DockerTailer) forwardMessages() {
 			return
 		}
 
-		ts, sev, updatedMsg := dt.parseMessage(msg.Content())
+		ts, sev, updatedMsg, err := dt.parseMessage(msg.Content())
+		if err != nil {
+			log.Println(err)
+			continue
+		}
 
 		containerMsg := message.NewContainerMessage(updatedMsg)
 		msgOrigin := message.NewOrigin()
@@ -220,7 +230,15 @@ func (dt *DockerTailer) buildTagsPayload() []byte {
 
 // parseMessage extracts the date and the severity from the raw docker message
 // see https://godoc.org/github.com/moby/moby/client#Client.ContainerLogs
-func (dt *DockerTailer) parseMessage(msg []byte) (string, []byte, []byte) {
+func (dt *DockerTailer) parseMessage(msg []byte) (string, []byte, []byte, error) {
+
+	// The format of the message should be :
+	// [8]byte{STREAM_TYPE, 0, 0, 0, SIZE1, SIZE2, SIZE3, SIZE4}[]byte{OUTPUT}
+	// If we don't have at the very least 8 bytes we can consider this message can't be parsed.
+	if len(msg) < messageHeaderLength {
+		return "", nil, nil, errors.New("Can't parse docker message: expected a 8 header bytes")
+	}
+
 	// First byte is 1 for stdout and 2 for stderr
 	sev := config.SEV_INFO
 	if msg[0] == 2 {
@@ -228,15 +246,18 @@ func (dt *DockerTailer) parseMessage(msg []byte) (string, []byte, []byte) {
 	}
 
 	// timestamp goes from byte 8 till first space
-	from := 8
-	to := bytes.Index(msg[from:], []byte{' '})
+	to := bytes.Index(msg[messageHeaderLength:], []byte{' '})
 	if to == -1 {
-		log.Println("invalid docker payload collected, skipping message")
-		return "", sev, msg
+		return "", nil, nil, errors.New("Can't parse docker message: expected a whitespace after header")
 	}
-	to += from
-	ts := string(msg[from:to])
-	return ts, sev, msg[to+1:]
+	to += messageHeaderLength
+	ts := string(msg[messageHeaderLength:to])
+	return ts, sev, msg[to+1:], nil
+}
+
+// isValidMessage makes sure the raw docker message is valid.
+func (dt *DockerTailer) isValidMessage(msg []byte) bool {
+	return len(msg) > messageHeaderLength
 }
 
 // wait lets the reader sleep for a bit

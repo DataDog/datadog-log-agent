@@ -6,6 +6,7 @@
 package container
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
@@ -35,7 +36,8 @@ func (suite *DockerTailerTestSuite) TestDockerTailerRemovesDate() {
 		msg = append(msg, msgMeta[i])
 	}
 	msg = append(msg, []byte("2007-01-12T01:01:01.000000000Z my message")...)
-	ts, sev, msg := suite.tailer.parseMessage(msg)
+	ts, sev, msg, err := suite.tailer.parseMessage(msg)
+	suite.Nil(err)
 	suite.Equal("my message", string(msg))
 	suite.Equal("<46>", string(sev))
 	suite.Equal("2007-01-12T01:01:01.000000000Z", ts)
@@ -46,7 +48,8 @@ func (suite *DockerTailerTestSuite) TestDockerTailerRemovesDate() {
 		msg = append(msg, msgMeta[i])
 	}
 	msg = append(msg, []byte("2008-01-12T01:01:01.000000000Z my error")...)
-	ts, sev, msg = suite.tailer.parseMessage(msg)
+	ts, sev, msg, err = suite.tailer.parseMessage(msg)
+	suite.Nil(err)
 	suite.Equal("my error", string(msg))
 	suite.Equal("<43>", string(sev))
 	suite.Equal("2008-01-12T01:01:01.000000000Z", ts)
@@ -70,6 +73,22 @@ func (suite *DockerTailerTestSuite) TestBuildTagsPayload() {
 
 	suite.tailer.source = &config.IntegrationConfigLogSource{}
 	suite.Equal("[dd ddtags=\"test,hello:world,\"]", string(suite.tailer.buildTagsPayload()))
+}
+
+func (suite *DockerTailerTestSuite) TestParseMessage() {
+
+	msg := []byte{}
+	msg = append(msg, []byte{1, 0, 0, 0, 0}...)
+	_, _, _, err := suite.tailer.parseMessage(msg)
+	suite.Equal(errors.New("Can't parse docker message: expected a 8 header bytes"), err)
+
+	msg = []byte{}
+	msg = append(msg, []byte{1, 0, 0, 0, 0, 62, 49, 103}...)
+	msg = append(msg, []byte("INFO_10:26:31_Loading_settings_from_file:/etc/cassandra/cassandra.yaml")...)
+
+	_, _, _, err = suite.tailer.parseMessage(msg)
+	suite.Equal(errors.New("Can't parse docker message: expected a whitespace after header"), err)
+
 }
 
 func TestDockerTailerTestSuite(t *testing.T) {
