@@ -255,11 +255,6 @@ func (dt *DockerTailer) parseMessage(msg []byte) (string, []byte, []byte, error)
 	return ts, sev, msg[to+1:], nil
 }
 
-// isValidMessage makes sure the raw docker message is valid.
-func (dt *DockerTailer) isValidMessage(msg []byte) bool {
-	return len(msg) > messageHeaderLength
-}
-
 // wait lets the reader sleep for a bit
 func (dt *DockerTailer) wait() {
 	time.Sleep(dt.sleepDuration)
