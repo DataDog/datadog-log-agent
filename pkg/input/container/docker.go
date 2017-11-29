@@ -236,7 +236,7 @@ func (dt *DockerTailer) parseMessage(msg []byte) (string, []byte, []byte, error)
 	// [8]byte{STREAM_TYPE, 0, 0, 0, SIZE1, SIZE2, SIZE3, SIZE4}[]byte{OUTPUT}
 	// If we don't have at the very least 8 bytes we can consider this message can't be parsed.
 	if len(msg) < messageHeaderLength {
-		return "", nil, nil, errors.New("Can't parse docker message: expected a 8 header bytes")
+		return "", nil, nil, errors.New("Can't parse docker message: expected a 8 bytes header")
 	}
 
 	// First byte is 1 for stdout and 2 for stderr

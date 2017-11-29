@@ -80,7 +80,7 @@ func (suite *DockerTailerTestSuite) TestParseMessage() {
 	msg := []byte{}
 	msg = append(msg, []byte{1, 0, 0, 0, 0}...)
 	_, _, _, err := suite.tailer.parseMessage(msg)
-	suite.Equal(errors.New("Can't parse docker message: expected a 8 header bytes"), err)
+	suite.Equal(errors.New("Can't parse docker message: expected a 8 bytes header"), err)
 
 	msg = []byte{}
 	msg = append(msg, []byte{1, 0, 0, 0, 0, 62, 49, 103}...)
