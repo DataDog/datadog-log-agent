@@ -29,7 +29,8 @@ type Tailer struct {
 	path string
 	file *os.File
 
-	lastOffset        int64
+	readOffset        int64
+	decodedOffset     int64
 	shouldTrackOffset bool
 
 	outputChan chan message.Message
@@ -50,10 +51,10 @@ func NewTailer(outputChan chan message.Message, source *config.IntegrationConfig
 	return &Tailer{
 		path:       source.Path,
 		outputChan: outputChan,
-		d:          decoder.InitializedDecoder(),
+		d:          decoder.InitializeDecoder(source),
 		source:     source,
 
-		lastOffset:        0,
+		readOffset:        0,
 		shouldTrackOffset: true,
 
 		sleepDuration: defaultSleepDuration,
@@ -116,7 +117,8 @@ func (t *Tailer) startReading(offset int64, whence int) error {
 	}
 	ret, _ := f.Seek(offset, whence)
 	t.file = f
-	t.lastOffset = ret
+	t.readOffset = ret
+	t.decodedOffset = ret
 
 	go t.readForever()
 	return nil
@@ -134,28 +136,21 @@ func (t *Tailer) tailFromEnd() error {
 	return t.tailFrom(0, os.SEEK_END)
 }
 
-// reset makes the tailer seek the begining of its file
-func (t *Tailer) reset() {
-	t.file.Seek(0, os.SEEK_SET)
-	t.setLastOffset(0)
-}
-
 // forwardMessages lets the Tailer forward log messages to the output channel
 func (t *Tailer) forwardMessages() {
-	for msg := range t.d.OutputChan {
-
-		_, ok := msg.(*message.StopMessage)
-		if ok {
+	for output := range t.d.OutputChan {
+		if output.ShouldStop {
 			return
 		}
 
-		fileMsg := message.NewFileMessage(msg.Content())
-		msgOffset := msg.GetOrigin().Offset
+		fileMsg := message.NewFileMessage(output.Content)
+		msgOffset := t.decodedOffset + int64(output.RawDataLen)
 		identifier := t.Identifier()
 		if !t.shouldTrackOffset {
 			msgOffset = 0
 			identifier = ""
 		}
+		t.decodedOffset = msgOffset
 		msgOrigin := message.NewOrigin()
 		msgOrigin.LogSource = t.source
 		msgOrigin.Identifier = identifier
@@ -192,8 +187,8 @@ func (t *Tailer) readForever() {
 			t.wait()
 			continue
 		}
-		t.d.InputChan <- decoder.NewPayload(inBuf[:n], t.GetLastOffset())
-		t.incrementLastOffset(n)
+		t.d.InputChan <- decoder.NewInput(inBuf[:n])
+		t.incrementReadOffset(n)
 	}
 }
 
@@ -216,16 +211,12 @@ func (t *Tailer) shouldSoftStop() bool {
 	return t.shouldStop
 }
 
-func (t *Tailer) incrementLastOffset(n int) {
-	atomic.AddInt64(&t.lastOffset, int64(n))
+func (t *Tailer) incrementReadOffset(n int) {
+	atomic.AddInt64(&t.readOffset, int64(n))
 }
 
-func (t *Tailer) setLastOffset(n int64) {
-	atomic.StoreInt64(&t.lastOffset, n)
-}
-
-func (t *Tailer) GetLastOffset() int64 {
-	return atomic.LoadInt64(&t.lastOffset)
+func (t *Tailer) GetReadOffset() int64 {
+	return atomic.LoadInt64(&t.readOffset)
 }
 
 // wait lets the tailer sleep for a bit

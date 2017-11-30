@@ -70,7 +70,7 @@ func TestExclusion(t *testing.T) {
 	assert.Equal(t, true, shouldProcess)
 }
 
-func TestRedacting(t *testing.T) {
+func TestMask(t *testing.T) {
 	p := NewTestProcessor()
 	var shouldProcess bool
 	var redactedMessage []byte
@@ -93,6 +93,15 @@ func TestRedacting(t *testing.T) {
 	shouldProcess, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("The credit card 4323124312341234 was used to buy some time"), &source))
 	assert.Equal(t, true, shouldProcess)
 	assert.Equal(t, []byte("The credit card [masked_credit_card] was used to buy some time"), redactedMessage)
+}
+
+func TestTruncate(t *testing.T) {
+	p := NewTestProcessor()
+	source := config.IntegrationConfigLogSource{}
+	var redactedMessage []byte
+
+	_, redactedMessage = p.applyRedactingRules(newNetworkMessage([]byte("hello"), &source))
+	assert.Equal(t, []byte("hello"), redactedMessage)
 }
 
 func TestComputeExtraContent(t *testing.T) {

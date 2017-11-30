@@ -86,7 +86,7 @@ func writeMessage(file *os.File) {
 	file.WriteString("hello world\n")
 }
 
-func listenToChan(inputChan chan *decoder.Payload, messagesReceived *uint64) {
+func listenToChan(inputChan chan *decoder.Input, messagesReceived *uint64) {
 	for _ = range inputChan {
 		atomic.AddUint64(messagesReceived, 1)
 		tick()
@@ -104,16 +104,16 @@ func (suite *TailerTestSuite) TestTailerIsSlowAndCatchesUp() {
 	suite.tl.sleepDuration = time.Millisecond
 
 	// mock tailer output channel
-	suite.tl.d.InputChan = make(chan *decoder.Payload, 2)
+	suite.tl.d.InputChan = make(chan *decoder.Input, 2)
 	suite.tl.startReading(0, os.SEEK_END)
 
 	// fill output channel
-	of1 := suite.tl.GetLastOffset()
+	of1 := suite.tl.GetReadOffset()
 	for i := 0; i < 5; i++ {
 		writeMessage(suite.testFile)
 	}
 	// assert we read part of the file
-	of2 := suite.tl.GetLastOffset()
+	of2 := suite.tl.GetReadOffset()
 	suite.True(of1 < of2)
 
 	// assert reads are blocked: we write in the file but
@@ -121,7 +121,7 @@ func (suite *TailerTestSuite) TestTailerIsSlowAndCatchesUp() {
 	for i := 0; i < 5; i++ {
 		writeMessage(suite.testFile)
 	}
-	of3 := suite.tl.GetLastOffset()
+	of3 := suite.tl.GetReadOffset()
 	suite.Equal(of2, of3)
 
 	// slowly process all logs in the channel
@@ -153,7 +153,7 @@ func (suite *TailerTestSuite) TestTailerIsTooSlowAndClosed() {
 	tl.closeTimeout = 2 * time.Millisecond
 
 	// mock tailer output channel
-	tl.d.InputChan = make(chan *decoder.Payload, 2)
+	tl.d.InputChan = make(chan *decoder.Input, 2)
 	tl.startReading(0, os.SEEK_END)
 
 	// fill output channel

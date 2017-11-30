@@ -9,41 +9,77 @@ import (
 	"bytes"
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
-	"github.com/DataDog/datadog-log-agent/pkg/message"
 )
 
-// Payload represents a list of bytes and an optional reference to its origin
-type Payload struct {
+// contentLenLimit represents the length limit above which we want to truncate the output content
+var contentLenLimit = 256 * 1000
+
+// Input represents a list of bytes consumed by the Decoder
+type Input struct {
 	content []byte
-	offset  int64
 }
 
-// NewPayload returns a new decoder payload
-func NewPayload(content []byte, offset int64) *Payload {
-	return &Payload{content, offset}
+// NewInput returns a new input
+func NewInput(content []byte) *Input {
+	return &Input{content}
 }
 
-// Decoder splits raw data based on `\n`, and sends those messages to a channel
+// Output represents a list of bytes produced by the Decoder
+type Output struct {
+	Content    []byte
+	RawDataLen int
+	ShouldStop bool
+}
+
+// newOutput returns a new decoder output
+func NewOutput(content []byte, rawDataLen int) *Output {
+	return &Output{
+		Content:    content,
+		RawDataLen: rawDataLen,
+	}
+}
+
+// newOutputStop returns a new decoder output stop
+func newStopOutput() *Output {
+	return &Output{ShouldStop: true}
+}
+
+// Decoder splits raw data into lines and passes them to a lineHandler that emits outputs
 type Decoder struct {
-	InputChan  chan *Payload
-	OutputChan chan message.Message
-	msgBuffer  *bytes.Buffer
+	InputChan  chan *Input
+	OutputChan chan *Output
+
+	lineBuffer  *bytes.Buffer
+	lineHandler LineHandler
 }
 
 // InitializeDecoder returns a properly initialized Decoder
-func InitializedDecoder() *Decoder {
-	inputChan := make(chan *Payload)
-	outputChan := make(chan message.Message)
-	return New(inputChan, outputChan)
+func InitializeDecoder(source *config.IntegrationConfigLogSource) *Decoder {
+	inputChan := make(chan *Input)
+	outputChan := make(chan *Output)
+
+	var lineHandler LineHandler
+	for _, rule := range source.ProcessingRules {
+		switch rule.Type {
+		case config.MULTILINE:
+			lineHandler = NewMultiLineLineHandler(outputChan, rule.Reg)
+		}
+	}
+	if lineHandler == nil {
+		lineHandler = NewSingleLineHandler(outputChan)
+	}
+
+	return New(inputChan, outputChan, lineHandler)
 }
 
 // New returns an initialized Decoder
-func New(InputChan chan *Payload, OutputChan chan message.Message) *Decoder {
-	var msgBuf bytes.Buffer
+func New(InputChan chan *Input, OutputChan chan *Output, lineHandler LineHandler) *Decoder {
+	var lineBuffer bytes.Buffer
 	return &Decoder{
-		InputChan:  InputChan,
-		OutputChan: OutputChan,
-		msgBuffer:  &msgBuf,
+		InputChan:   InputChan,
+		OutputChan:  OutputChan,
+		lineBuffer:  &lineBuffer,
+		lineHandler: lineHandler,
 	}
 }
 
@@ -52,57 +88,48 @@ func (d *Decoder) Start() {
 	go d.run()
 }
 
-// run lets the Decoder handle data coming from the InputChan
-func (d *Decoder) run() {
-	for data := range d.InputChan {
-		d.decodeIncomingData(data.content, data.offset)
-	}
-	d.OutputChan <- message.NewStopMessage()
-}
-
 // Stop stops the Decoder
 func (d *Decoder) Stop() {
 	close(d.InputChan)
 }
 
-var truncatedMsg = []byte("...TRUNCATED...")
-var truncatedLen = len(truncatedMsg)
-var maxMessageLen = config.MaxMessageLen - truncatedLen
-
-// sendBuffuredMessage flushes the buffer and sends the message
-func (d *Decoder) sendBuffuredMessage(offset int64) {
-	msg := make([]byte, d.msgBuffer.Len())
-	// d.msgBuffer.Bytes() returns a slice to the []byte, we thus need to copy it
-	copy(msg, d.msgBuffer.Bytes())
-	if len(msg) > 0 {
-		m := message.NewMessage(msg)
-		o := message.NewOrigin()
-		o.Offset = offset
-		m.SetOrigin(o)
-		d.OutputChan <- m
+// run lets the Decoder handle data coming from InputChan
+func (d *Decoder) run() {
+	for data := range d.InputChan {
+		d.decodeIncomingData(data.content)
 	}
-	d.msgBuffer.Reset()
+	// finish to stop decoder
+	d.lineHandler.Stop()
 }
 
-// decodeIncomingData splits raw data based on `\n`, creates and sends messages to a channel
-func (d *Decoder) decodeIncomingData(inBuf []byte, offset int64) {
-	var i, j = 0, 0
-	var maxj = maxMessageLen - d.msgBuffer.Len()
-	// Note: we will truncate messages of length MaxLen - truncatedLen
-	// instead of MaxLen. We'll live with it for now
-	for ; j < len(inBuf); j++ {
-		if inBuf[j] == '\n' {
-			d.msgBuffer.Write(inBuf[i:j])
-			d.sendBuffuredMessage(offset + int64(j+1))
-			i = j + 1 // +1 as we skip the `\n`
-			maxj = maxMessageLen - d.msgBuffer.Len()
-		} else if j == maxj {
-			d.msgBuffer.Write(inBuf[i:j])
-			d.msgBuffer.Write(truncatedMsg)
-			d.sendBuffuredMessage(offset + int64(j))
-			d.msgBuffer.Write(truncatedMsg)
+// decodeIncomingData splits raw data based on '\n', creates and processes new lines
+func (d *Decoder) decodeIncomingData(inBuf []byte) {
+	i, j := 0, 0
+	n := len(inBuf)
+	maxj := contentLenLimit - d.lineBuffer.Len()
+
+	for ; j < n; j++ {
+		if j == maxj {
+			// send line because it is too long
+			d.lineBuffer.Write(inBuf[i:j])
+			d.sendLine()
 			i = j
+			maxj = i + contentLenLimit
+		} else if inBuf[j] == '\n' {
+			d.lineBuffer.Write(inBuf[i:j])
+			d.sendLine()
+			i = j + 1 // +1 as we skip the `\n`
+			maxj = i + contentLenLimit
 		}
 	}
-	d.msgBuffer.Write(inBuf[i:j])
+	d.lineBuffer.Write(inBuf[i:j])
+}
+
+// sendLine copies content from lineBuffer which is passed to lineHandler
+func (d *Decoder) sendLine() {
+	content := make([]byte, d.lineBuffer.Len())
+	copy(content, d.lineBuffer.Bytes())
+	d.lineBuffer.Reset()
+	newLine := NewLine(content)
+	d.lineHandler.Handle(newLine)
 }

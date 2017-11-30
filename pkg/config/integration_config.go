@@ -22,6 +22,7 @@ const (
 	DOCKER_TYPE      = "docker"
 	EXCLUDE_AT_MATCH = "exclude_at_match"
 	MASK_SEQUENCES   = "mask_sequences"
+	MULTILINE        = "multi_line"
 )
 
 const INTEGRATION_CONFIG_EXTENTION = ".yaml"
@@ -184,6 +185,8 @@ func validateProcessingRules(rules []LogsProcessingRule) ([]LogsProcessingRule, 
 		case MASK_SEQUENCES:
 			rules[i].Reg = regexp.MustCompile(rule.Pattern)
 			rules[i].ReplacePlaceholderBytes = []byte(rule.ReplacePlaceholder)
+		case MULTILINE:
+			rules[i].Reg = regexp.MustCompile("^" + rule.Pattern)
 		default:
 			if rule.Type == "" {
 				return nil, fmt.Errorf("LogsAgent misconfigured: type must be set for log processing rule `%s`", rule.Name)
