@@ -2,7 +2,7 @@
 // under the Apache License Version 2.0.
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
 // Copyright 2017 Datadog, Inc.
-// +build !windows
+// +build windows
 
 package tailer
 
@@ -14,7 +14,9 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/DataDog/datadog-log-agent/pkg/auditor"
 	"github.com/DataDog/datadog-log-agent/pkg/config"
@@ -25,25 +27,30 @@ import (
 const defaultSleepDuration = 1 * time.Second
 const defaultCloseTimeout = 60 * time.Second
 
-// Tailer tails one file and sends messages to an output channel
+type dirwatch struct {
+	ov  syscall.Overlapped
+	buf [4096]byte
+}
 type Tailer struct {
-	path string
-	file *os.File
+	path     string
+	fullpath string
+	dirpath  string
 
 	lastOffset        int64
+	whence            int
 	shouldTrackOffset bool
 
 	outputChan chan message.Message
 	d          *decoder.Decoder
 	source     *config.IntegrationConfigLogSource
 
-	sleepDuration time.Duration
-	sleepMutex    sync.Mutex
-
 	closeTimeout time.Duration
 	shouldStop   bool
 	stopTimer    *time.Timer
 	stopMutex    sync.Mutex
+
+	dirHandle syscall.Handle
+	iocp      syscall.Handle
 }
 
 // NewTailer returns an initialized Tailer
@@ -55,13 +62,12 @@ func NewTailer(outputChan chan message.Message, source *config.IntegrationConfig
 		source:     source,
 
 		lastOffset:        0,
+		whence:            io.SeekStart,
 		shouldTrackOffset: true,
 
-		sleepDuration: defaultSleepDuration,
-		sleepMutex:    sync.Mutex{},
-		shouldStop:    false,
-		stopMutex:     sync.Mutex{},
-		closeTimeout:  defaultCloseTimeout,
+		shouldStop: false,
+		stopMutex:  sync.Mutex{},
+		//closeTimeout:  defaultCloseTimeout,
 	}
 }
 
@@ -83,6 +89,7 @@ func (t *Tailer) Stop(shouldTrackOffset bool) {
 	t.shouldTrackOffset = shouldTrackOffset
 	t.stopTimer = time.NewTimer(t.closeTimeout)
 	t.stopMutex.Unlock()
+	syscall.PostQueuedCompletionStatus(t.iocp, 0, 1, nil)
 }
 
 // onStop handles the housekeeping when we stop the tailer
@@ -90,7 +97,6 @@ func (t *Tailer) onStop() {
 	t.stopMutex.Lock()
 	t.d.Stop()
 	log.Println("Closing", t.path)
-	t.file.Close()
 	t.stopTimer.Stop()
 	t.stopMutex.Unlock()
 }
@@ -106,19 +112,29 @@ func (t *Tailer) tailFrom(offset int64, whence int) error {
 }
 
 func (t *Tailer) startReading(offset int64, whence int) error {
-	fullpath, err := filepath.Abs(t.path)
+	var err error
+	t.fullpath, err = filepath.Abs(t.path)
 	if err != nil {
 		return err
 	}
-	log.Println("Opening", t.path)
-	f, err := os.Open(fullpath)
-	if err != nil {
-		return err
-	}
-	ret, _ := f.Seek(offset, whence)
-	t.file = f
-	t.lastOffset = ret
+	t.dirpath = filepath.Dir(t.fullpath)
 
+	t.dirHandle, err = syscall.CreateFile(syscall.StringToUTF16Ptr(t.dirpath),
+		syscall.FILE_LIST_DIRECTORY,
+		syscall.FILE_SHARE_READ|syscall.FILE_SHARE_WRITE|syscall.FILE_SHARE_DELETE,
+		nil,
+		syscall.OPEN_EXISTING,
+		syscall.FILE_FLAG_BACKUP_SEMANTICS|syscall.FILE_FLAG_OVERLAPPED,
+		0)
+	if err != nil {
+		return err
+	}
+	t.lastOffset = offset
+	t.whence = whence
+	t.iocp, err = syscall.CreateIoCompletionPort(t.dirHandle, 0, 0, 0)
+	if err != nil {
+		return err
+	}
 	go t.readForever()
 	return nil
 }
@@ -137,7 +153,6 @@ func (t *Tailer) tailFromEnd() error {
 
 // reset makes the tailer seek the begining of its file
 func (t *Tailer) reset() {
-	t.file.Seek(0, os.SEEK_SET)
 	t.setLastOffset(0)
 }
 
@@ -166,60 +181,121 @@ func (t *Tailer) forwardMessages() {
 	}
 }
 
-// readForever lets the tailer tail the content of a file
-// until it is closed.
-func (t *Tailer) readForever() {
-	for {
-		if t.shouldHardStop() {
-			t.onStop()
-			return
-		}
+func (t *Tailer) readAvailable() (bool, error) {
 
-		inBuf := make([]byte, 4096)
-		n, err := t.file.Read(inBuf)
-		if err == io.EOF {
-			if t.shouldSoftStop() {
-				t.onStop()
-				return
-			}
-			t.wait()
-			continue
-		}
-		if err != nil {
-			log.Println("Err:", err)
-			return
-		}
-		if n == 0 {
-			t.wait()
-			continue
+	inBuf := make([]byte, 4096)
+	f, err := os.Open(t.fullpath)
+	if err != nil {
+		return true, err
+	}
+	defer f.Close()
+	f.Seek(t.lastOffset, io.SeekStart)
+	for {
+		n, err := f.Read(inBuf)
+		if n == 0 || err != nil {
+			break
 		}
 		t.d.InputChan <- decoder.NewPayload(inBuf[:n], t.GetLastOffset())
 		t.incrementLastOffset(n)
 	}
+	if t.shouldSoftStop() {
+		t.onStop()
+		return true, nil
+	}
+	return false, nil
+
+}
+
+// readForever lets the tailer tail the content of a file
+// until it is closed.
+func (t *Tailer) readForever() {
+
+	if ret, _ := t.readAvailable(); ret {
+		return
+	}
+
+	var directory dirwatch
+	var mask uint32
+	mask = syscall.FILE_NOTIFY_CHANGE_LAST_WRITE |
+		syscall.FILE_NOTIFY_CHANGE_FILE_NAME |
+		syscall.FILE_NOTIFY_CHANGE_CREATION
+
+	for {
+		err := syscall.ReadDirectoryChanges(t.dirHandle, &directory.buf[0],
+			uint32(unsafe.Sizeof(directory.buf)), false, mask, nil, &directory.ov, 0)
+
+		if err != nil {
+			log.Fatalf("Error ReadDirectoryChanges: %s\n", err.Error())
+			return
+		}
+
+		var n, key uint32
+		var ol *syscall.Overlapped
+		err = syscall.GetQueuedCompletionStatus(t.iocp, &n, &key, &ol, syscall.INFINITE)
+		// Point "raw" to the event in the buffer
+		var offset uint32
+		if key != 0 {
+			log.Printf("Got stop key, stopping\n")
+			return
+		}
+		for {
+			raw := (*syscall.FileNotifyInformation)(unsafe.Pointer(&directory.buf[offset]))
+			buf := (*[syscall.MAX_PATH]uint16)(unsafe.Pointer(&raw.FileName))
+			name := syscall.UTF16ToString(buf[:raw.FileNameLength/2])
+
+			changename := filepath.Join(t.dirpath, name)
+			if changename == t.path {
+				switch raw.Action {
+				case syscall.FILE_ACTION_ADDED:
+					log.Printf("matching file added %s\n", name)
+					// reset offset to zero
+					t.setLastOffset(0)
+					if ret, _ := t.readAvailable(); ret {
+						return
+					}
+
+				case syscall.FILE_ACTION_REMOVED:
+					log.Printf("matching file removed %s\n", name)
+					// it's OK that it was removed; just set the read index
+					// back to zero
+					t.setLastOffset(0)
+				case syscall.FILE_ACTION_MODIFIED:
+					log.Printf("matching file modified %s\n", name)
+					if ret, _ := t.readAvailable(); ret {
+						return
+					}
+
+				case syscall.FILE_ACTION_RENAMED_OLD_NAME:
+					// was renamed to a different file (rotated?).  Set the
+					// read index back to zero
+					log.Printf("matching file renamed from %s\n", name)
+					t.lastOffset = 0
+
+				case syscall.FILE_ACTION_RENAMED_NEW_NAME:
+					log.Printf("matching file renamed to %s\n", name)
+					// file was renamed into the file we're watching.  Start
+					// from zero? start from current position?
+					t.setLastOffset(0)
+					if ret, _ := t.readAvailable(); ret {
+						return
+					}
+
+				}
+			}
+
+			if raw.NextEntryOffset == 0 {
+				break
+			}
+			offset += raw.NextEntryOffset
+		}
+
+	}
+
 }
 
 func (t *Tailer) checkForRotation() bool {
-	f, err := os.Open(t.path)
-	if err != nil {
-		return false
-	}
-	stat1, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	stat2, err := t.file.Stat()
-	if err != nil {
-		return true
-	}
-	if inode(stat1) != inode(stat2) {
-		return true
-	}
-
-	if stat1.Size() < tailer.GetLastOffset() {
-		t.reset()
-	}
+	return false
 }
-
 func (t *Tailer) shouldHardStop() bool {
 	t.stopMutex.Lock()
 	defer t.stopMutex.Unlock()
@@ -249,25 +325,4 @@ func (t *Tailer) setLastOffset(n int64) {
 
 func (t *Tailer) GetLastOffset() int64 {
 	return atomic.LoadInt64(&t.lastOffset)
-}
-
-// wait lets the tailer sleep for a bit
-func (t *Tailer) wait() {
-	t.sleepMutex.Lock()
-	defer t.sleepMutex.Unlock()
-	time.Sleep(t.sleepDuration)
-}
-
-// inode uniquely identifies a file on a filesystem
-func inode(f os.FileInfo) uint64 {
-	s := f.Sys()
-	if s == nil {
-		return 0
-	}
-	switch s := s.(type) {
-	case *syscall.Stat_t:
-		return uint64(s.Ino)
-	default:
-		return 0
-	}
 }
