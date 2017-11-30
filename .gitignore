@@ -5,3 +5,7 @@ pkg/input/tailer/tests/*
 pkg/logagent/etc/*.yaml
 pkg/logagent/etc/conf.d/*.yaml
 /logagent
+pkg/logagent/windows_resources/log-agent-msg.rc
+pkg/logagent/windows_resources/*.bin
+# file generated at build time by message compiler
+log-agent-msg.h
