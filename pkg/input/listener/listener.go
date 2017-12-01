@@ -6,7 +6,7 @@
 package listener
 
 import (
-	"log"
+	log "github.com/cihub/seelog"
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/pipeline"
@@ -33,14 +33,14 @@ func (l *Listener) Start() {
 		case config.TCP_TYPE:
 			tcpl, err := NewTcpListener(l.pp, source)
 			if err != nil {
-				log.Println("Can't start tcp source:", err)
+				log.Error("Can't start tcp source:", err)
 			} else {
 				tcpl.Start()
 			}
 		case config.UDP_TYPE:
 			udpl, err := NewUdpListener(l.pp, source)
 			if err != nil {
-				log.Println("Can't start udp source:", err)
+				log.Error("Can't start udp source:", err)
 			} else {
 				udpl.Start()
 			}

@@ -7,8 +7,9 @@ package listener
 
 import (
 	"fmt"
-	"log"
 	"net"
+
+	log "github.com/cihub/seelog"
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/pipeline"
@@ -23,7 +24,7 @@ type TcpListener struct {
 
 // NewTcpListener returns an initialized NewTcpListener
 func NewTcpListener(pp *pipeline.PipelineProvider, source *config.IntegrationConfigLogSource) (*AbstractNetworkListener, error) {
-	log.Println("Starting TCP forwarder on port", source.Port)
+	log.Info("Starting TCP forwarder on port", source.Port)
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", source.Port))
 	if err != nil {
@@ -46,7 +47,7 @@ func (tcpListener *TcpListener) run() {
 	for {
 		conn, err := tcpListener.listener.Accept()
 		if err != nil {
-			log.Println("Can't listen:", err)
+			log.Error("Can't listen:", err)
 			return
 		}
 		go tcpListener.anl.handleConnection(conn)

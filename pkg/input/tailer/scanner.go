@@ -6,10 +6,11 @@
 package tailer
 
 import (
-	"log"
 	"os"
 	"syscall"
 	"time"
+
+	log "github.com/cihub/seelog"
 
 	"github.com/DataDog/datadog-log-agent/pkg/auditor"
 	"github.com/DataDog/datadog-log-agent/pkg/config"
@@ -48,7 +49,7 @@ func New(sources []*config.IntegrationConfigLogSource, pp *pipeline.PipelineProv
 func (s *Scanner) setup() {
 	for _, source := range s.sources {
 		if _, ok := s.tailers[source.Path]; ok {
-			log.Println("Can't tail file twice:", source.Path)
+			log.Warn("Can't tail file twice:", source.Path)
 		} else {
 			s.setupTailer(source, false, s.pp.NextPipelineChan())
 		}
@@ -66,7 +67,7 @@ func (s *Scanner) setupTailer(source *config.IntegrationConfigLogSource, tailFro
 		err = t.recoverTailing(s.auditor)
 	}
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 	}
 	s.tailers[source.Path] = t
 }
