@@ -6,10 +6,10 @@
 package config
 
 import (
-	"log"
-
 	ddconfig "github.com/DataDog/datadog-agent/pkg/config"
+
 	"github.com/DataDog/datadog-agent/pkg/util"
+	log "github.com/cihub/seelog"
 	"github.com/spf13/viper"
 )
 
@@ -33,12 +33,18 @@ func buildMainConfig(config *viper.Viper, ddconfigPath, ddconfdPath string) erro
 		return err
 	}
 
+	logLevel := config.GetString("log_level")
+	err = ddconfig.SetupLogger(logLevel, "", "", false, false, "", true)
+	if err != nil {
+		return err
+	}
+
 	// For hostname, use value from config if set and non empty,
 	// or fallback on agent6's logic
 	if config.GetString("hostname") == "" {
 		hostname, err := util.GetHostname()
 		if err != nil {
-			log.Println(err)
+			log.Error(err)
 			hostname = "unknown"
 		}
 		config.Set("hostname", hostname)

@@ -11,10 +11,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"reflect"
 	"strings"
 	"time"
+
+	log "github.com/cihub/seelog"
 
 	"github.com/DataDog/datadog-agent/pkg/tagger"
 	dockerutil "github.com/DataDog/datadog-agent/pkg/util/docker"
@@ -158,7 +159,7 @@ func (dt *DockerTailer) readForever() {
 			continue
 		}
 		if err != nil {
-			log.Println("Err:", err)
+			log.Error("Err:", err)
 			return
 		}
 		if n == 0 {
@@ -183,7 +184,7 @@ func (dt *DockerTailer) forwardMessages() {
 
 		ts, sev, updatedMsg, err := dt.parseMessage(output.Content)
 		if err != nil {
-			log.Println(err)
+			log.Warn(err)
 			continue
 		}
 
@@ -213,7 +214,7 @@ func (dt *DockerTailer) keepDockerTagsUpdated() {
 func (dt *DockerTailer) checkForNewDockerTags() {
 	tags, err := tagger.Tag(dockerutil.ContainerIDToEntityName(dt.containerId), true)
 	if err != nil {
-		log.Println(err)
+		log.Warn(err)
 	} else {
 		if !reflect.DeepEqual(tags, dt.containerTags) {
 			dt.containerTags = tags

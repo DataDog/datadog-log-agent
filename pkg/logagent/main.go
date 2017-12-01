@@ -7,12 +7,12 @@ package main
 
 import (
 	"flag"
-	"log"
 	"net/http"
 	_ "net/http/pprof"
 
+	log "github.com/cihub/seelog"
+
 	"github.com/DataDog/datadog-log-agent/pkg/config"
-	"github.com/DataDog/datadog-log-agent/pkg/utils"
 )
 
 var ddconfigPath = flag.String("ddconfig", "", "Path to the datadog.yaml configuration file")
@@ -22,24 +22,22 @@ var ddconfdPath = flag.String("ddconfd", "", "Path to the conf.d directory that 
 func main() {
 	flag.Parse()
 
-	utils.SetupLogger()
-
 	err := config.BuildLogsAgentConfig(*ddconfigPath, *ddconfdPath)
 	if err != nil {
-		log.Println(err)
-		log.Println("Not starting logs-agent")
+		log.Error(err)
+		log.Error("Not starting logs-agent")
 	} else if config.LogsAgent.GetBool("log_enabled") {
-		log.Println("Starting logs-agent")
+		log.Info("Starting logs-agent")
 		Start()
 
 		if config.LogsAgent.GetBool("log_profiling_enabled") {
-			log.Println("starting logs-agent profiling")
+			log.Info("starting logs-agent profiling")
 			go func() {
-				log.Println(http.ListenAndServe("localhost:6060", nil))
+				log.Info(http.ListenAndServe("localhost:6060", nil))
 			}()
 		}
 	} else {
-		log.Println("logs-agent disabled")
+		log.Info("logs-agent disabled")
 	}
 
 	done := make(chan bool)

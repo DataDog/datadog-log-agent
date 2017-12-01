@@ -7,8 +7,9 @@ package listener
 
 import (
 	"io"
-	"log"
 	"net"
+
+	log "github.com/cihub/seelog"
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/decoder"
@@ -65,7 +66,7 @@ func (anl *AbstractNetworkListener) handleConnection(conn net.Conn) {
 			return
 		}
 		if err != nil {
-			log.Println("Couldn't read message from connection:", err)
+			log.Error("Couldn't read message from connection:", err)
 			d.Stop()
 			return
 		}

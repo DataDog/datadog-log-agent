@@ -7,8 +7,9 @@ package listener
 
 import (
 	"fmt"
-	"log"
 	"net"
+
+	log "github.com/cihub/seelog"
 
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/pipeline"
@@ -23,7 +24,7 @@ type UdpListener struct {
 
 // NewUdpListener returns an initialized NewUdpListener
 func NewUdpListener(pp *pipeline.PipelineProvider, source *config.IntegrationConfigLogSource) (*AbstractNetworkListener, error) {
-	log.Println("Starting UDP forwarder on port", source.Port)
+	log.Info("Starting UDP forwarder on port", source.Port)
 
 	udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", source.Port))
 	if err != nil {

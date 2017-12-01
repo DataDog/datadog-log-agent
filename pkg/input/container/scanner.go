@@ -8,8 +8,11 @@ package container
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
+
+	log "github.com/cihub/seelog"
+	"github.com/docker/docker/api/types"
+	"github.com/moby/moby/client"
 
 	"github.com/DataDog/datadog-agent/pkg/tagger"
 
@@ -17,8 +20,6 @@ import (
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/message"
 	"github.com/DataDog/datadog-log-agent/pkg/pipeline"
-	"github.com/docker/docker/api/types"
-	"github.com/moby/moby/client"
 )
 
 const scanPeriod = 10 * time.Second
@@ -104,7 +105,7 @@ func (c *ContainerInput) scan(tailFromBegining bool) {
 }
 
 func (c *ContainerInput) stopTailer(tailer *DockerTailer) {
-	log.Println("Stop tailing container", c.HumanReadableContainerId(tailer.containerId))
+	log.Info("Stop tailing container", c.HumanReadableContainerId(tailer.containerId))
 	tailer.Stop()
 	delete(c.tailers, tailer.containerId)
 }
@@ -112,8 +113,8 @@ func (c *ContainerInput) stopTailer(tailer *DockerTailer) {
 func (c *ContainerInput) listContainers() []types.Container {
 	containers, err := c.cli.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
-		log.Println("Can't tail containers,", err)
-		log.Println("Is datadog-agent part of docker user group?")
+		log.Error("Can't tail containers,", err)
+		log.Error("Is datadog-agent part of docker user group?")
 		return []types.Container{}
 	}
 	return containers
@@ -143,14 +144,14 @@ func (c *ContainerInput) setup() error {
 	cli.UpdateClientVersion(DOCKER_API_VERSION)
 	c.cli = cli
 	if err != nil {
-		log.Println("Can't tail containers,", err)
+		log.Error("Can't tail containers,", err)
 		return fmt.Errorf("Can't initialize client")
 	}
 
 	// Initialize docker utils
 	err = tagger.Init()
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 	}
 
 	// Start tailing monitored containers
@@ -160,7 +161,7 @@ func (c *ContainerInput) setup() error {
 
 // setupTailer sets one tailer, making it tail from the begining or the end
 func (c *ContainerInput) setupTailer(cli *client.Client, container types.Container, source *config.IntegrationConfigLogSource, tailFromBegining bool, outputChan chan message.Message) {
-	log.Println("Detected container", container.Image, "-", c.HumanReadableContainerId(container.ID))
+	log.Info("Detected container", container.Image, "-", c.HumanReadableContainerId(container.ID))
 	t := NewDockerTailer(cli, container, source, outputChan)
 	var err error
 	if tailFromBegining {
@@ -169,7 +170,7 @@ func (c *ContainerInput) setupTailer(cli *client.Client, container types.Contain
 		err = t.recoverTailing(c.auditor)
 	}
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 	}
 	c.tailers[container.ID] = t
 }
