@@ -151,15 +151,16 @@ func (suite *ScannerTestSuite) TestScannerScanWithLogRotationCopyTruncate() {
 	suite.testFile.Seek(0, 0)
 	f, err := os.OpenFile(suite.testPath, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
 	suite.Nil(err)
-	_, err = f.WriteString("third\n")
-	suite.Nil(err)
 	s.scan()
 	newTailer = s.tailers[sources[0].Path]
 	suite.NotEqual(tailer, newTailer)
-	suite.Equal(newTailer.GetReadOffset(), int64(0))
+	suite.Equal(int64(0), newTailer.GetReadOffset())
 
+	_, err = f.WriteString("third\n")
+	suite.Nil(err)
 	msg = <-suite.outputChan
 	suite.Equal("third", string(msg.Content()))
+	suite.Equal(int64(6), newTailer.GetReadOffset())
 }
 
 func TestScannerTestSuite(t *testing.T) {
