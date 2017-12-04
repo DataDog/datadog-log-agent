@@ -10,13 +10,16 @@ import (
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
 
+	"github.com/DataDog/datadog-agent/pkg/pidfile"
 	"github.com/DataDog/datadog-log-agent/pkg/config"
 	"github.com/DataDog/datadog-log-agent/pkg/utils"
 )
 
 var ddconfigPath = flag.String("ddconfig", "", "Path to the datadog.yaml configuration file")
 var ddconfdPath = flag.String("ddconfd", "", "Path to the conf.d directory that contains all integration config files")
+var pidfilePath = flag.String("pid", "", "Path to set pidfile for process")
 
 // main starts the logs agent
 func main() {
@@ -30,6 +33,19 @@ func main() {
 		log.Println("Not starting logs-agent")
 	} else if config.LogsAgent.GetBool("log_enabled") {
 		log.Println("Starting logs-agent")
+		if *pidfilePath != "" {
+			err := pidfile.WritePID(*pidfilePath)
+			if err != nil {
+				log.Printf("Error while writing PID file, exiting: %v", err)
+				os.Exit(1)
+			}
+
+			log.Printf("pid '%d' written to pid file '%s'", os.Getpid(), *pidfilePath)
+			defer func() {
+				// remove pidfile if set
+				os.Remove(*pidfilePath)
+			}()
+		}
 		Start()
 
 		if config.LogsAgent.GetBool("log_profiling_enabled") {
