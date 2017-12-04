@@ -95,7 +95,7 @@ func (suite *ScannerTestSuite) TestScannerScanWithoutLogRotation() {
 
 	s.scan()
 	newTailer = s.tailers[sources[0].Path]
-	suite.Equal(tailer, newTailer)
+	suite.True(tailer == newTailer)
 
 	_, err = suite.testFile.WriteString("hello again\n")
 	suite.Nil(err)
@@ -124,7 +124,7 @@ func (suite *ScannerTestSuite) TestScannerScanWithLogRotation() {
 	suite.Nil(err)
 	s.scan()
 	newTailer = s.tailers[sources[0].Path]
-	suite.NotEqual(tailer, newTailer)
+	suite.True(tailer != newTailer)
 
 	_, err = f.WriteString("hello again\n")
 	suite.Nil(err)
@@ -153,7 +153,7 @@ func (suite *ScannerTestSuite) TestScannerScanWithLogRotationCopyTruncate() {
 	suite.Nil(err)
 	s.scan()
 	newTailer = s.tailers[sources[0].Path]
-	suite.NotEqual(tailer, newTailer)
+	suite.True(tailer != newTailer)
 	suite.Equal(int64(0), newTailer.GetReadOffset())
 
 	_, err = f.WriteString("third\n")
