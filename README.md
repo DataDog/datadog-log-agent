@@ -1,9 +1,9 @@
 # datadog-log-agent
 
-datadog-log-agent collects logs and submits them into datadog's infrastructure.
-This repository is temporary, mid term plan is to merge the code with [datadog-agent](https://github.com/DataDog/datadog-agent)
+## This repository is deprecated
 
-Contributions today may not be accepted, as plan is to have this code merged into datadog-agent repository
+datadog-log-agent collects logs and submits them into datadog's infrastructure.
+This repository is no longer maintained as its code has been merged to [datadog-agent](https://github.com/DataDog/datadog-agent), see [logs-agent](https://github.com/DataDog/datadog-agent/tree/master/cmd/logs) for more information.
 
 ## Structure
 
